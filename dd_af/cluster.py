@@ -28,6 +28,7 @@ class ClusterReportRow:
     source_replica: int
     source_time_ps: float
     mean_intra_cluster_rmsd_a: float
+    pocket_volume_nm3: float
     out_path: str
 
 
@@ -75,6 +76,37 @@ def load_pooled_trajectory(top_pdb: Path, dcd_paths: Sequence[Path]):
     return pooled, np.array(frame_replica), np.array(frame_time_ps)
 
 
+def pocket_volume_proxy(traj, atom_indices: Sequence[int]):
+    """Per-frame convex-hull volume (nm^3) of `atom_indices`' coordinates --
+    a cheap, no-rerun proxy for pocket "openness". `restraints.py` only ever
+    leaves the pocket-lining residues (plus their sequence margin) mobile,
+    so a hull that has grown relative to the pre-MD reference structure
+    means those residues have spread apart, i.e. the pocket has opened up.
+
+    This is *not* fpocket's own cavity volume -- reproducing that would mean
+    re-running fpocket on every pooled frame, far too slow for the hundreds
+    of frames a single sampling run produces (see README "Performance").
+    It's a purely geometric proxy computed directly from coordinates already
+    in memory, over the same pocket-lining atom selection `--cluster-atoms`
+    picks for RMSD clustering.
+
+    `qhull_options="QJ"` (joggle input) avoids `scipy.spatial.ConvexHull`
+    raising `QhullError` on the exact coplanarity/near-degeneracy a handful
+    of residues' CA atoms can produce for a small, flat pocket.
+    """
+    import numpy as np
+    from scipy.spatial import ConvexHull
+
+    if len(atom_indices) < 4:
+        raise ValueError(f"pocket_volume_proxy: need >=4 pocket atoms for a convex hull, got {len(atom_indices)}")
+
+    sub = traj.atom_slice(atom_indices)
+    volumes = np.empty(sub.n_frames, dtype=float)
+    for i in range(sub.n_frames):
+        volumes[i] = ConvexHull(sub.xyz[i], qhull_options="QJ").volume
+    return volumes
+
+
 def pairwise_rmsd_matrix(traj, atom_indices: Sequence[int]):
     """All-pairs RMSD matrix (Angstrom) over `atom_indices`, each frame
     superposed onto every other frame. O(n_frames^2); fine for the
@@ -120,18 +152,22 @@ def pick_medoids(rmsd_matrix, labels) -> Dict[int, int]:
 
 
 def write_representative_structures(
-    traj, medoids: Dict[int, int], labels, rmsd_matrix, frame_replica, frame_time_ps, out_dir: Path, *,
+    traj, medoids: Dict[int, int], labels, rmsd_matrix, frame_replica, frame_time_ps, pocket_volumes, out_dir: Path, *,
     show_progress: bool = True,
 ) -> List[ClusterReportRow]:
     """Write one representative structure per cluster (`cluster_00.pdb`
-    largest cluster ... descending population), covering the whole
-    trajectory topology (not just the pocket-atom subset used for
-    clustering), plus `cluster_report.csv`."""
+    largest cluster ... descending population), restricted to protein atoms
+    (dropping solvent/ions when the sampling run used explicit solvent --
+    `dd_docking`'s ensemble-member input is meant to be an apo receptor, not
+    a receptor-plus-water-box; this is a no-op selection for implicit-
+    solvent runs, which never had solvent atoms in the topology to begin
+    with), plus `cluster_report.csv`."""
     import numpy as np
     import pandas as pd
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    protein_atoms = traj.topology.select("protein")
 
     populations = sorted(set(labels.tolist()), key=lambda label: -int((labels == label).sum()))
     progress = ClusterProgress(enabled=show_progress)
@@ -141,11 +177,11 @@ def write_representative_structures(
         medoid_frame = medoids[label]
         mean_rmsd = float(rmsd_matrix[np.ix_(members, members)].mean())
         out_path = out_dir / f"cluster_{cluster_id:02d}.pdb"
-        traj[medoid_frame].save_pdb(str(out_path))
+        traj[medoid_frame].atom_slice(protein_atoms).save_pdb(str(out_path))
         rows.append(ClusterReportRow(
             cluster_id=cluster_id, n_frames=int(len(members)), source_replica=int(frame_replica[medoid_frame]),
             source_time_ps=float(frame_time_ps[medoid_frame]), mean_intra_cluster_rmsd_a=round(mean_rmsd, 3),
-            out_path=str(out_path),
+            pocket_volume_nm3=round(float(pocket_volumes[medoid_frame]), 3), out_path=str(out_path),
         ))
         progress.update(cluster_id, len(members), mean_rmsd, str(out_path))
 
@@ -183,12 +219,34 @@ def diagnostics_plot(rmsd_matrix, out_path: Path, *, n_clusters_range: Sequence[
 
 def cluster_pocket_trajectory(
     top_pdb: Path, dcd_paths: Sequence[Path], pocket_residues: Sequence[Residue], out_dir: Path, *,
-    n_clusters: int = 10, cluster_atoms: str = "ca", diagnostics: bool = False, show_progress: bool = True,
+    n_clusters: int = 10, cluster_atoms: str = "ca", diagnostics: bool = False,
+    pocket_expand_only: bool = False, pocket_expand_margin: float = 0.0, show_progress: bool = True,
 ) -> List[ClusterReportRow]:
     """End-to-end: load + pool replica DCDs, compute the pocket-atom RMSD
     matrix, cluster into `n_clusters` groups, and write representative
-    structures + `cluster_report.csv` (+ optional diagnostic plot)."""
+    structures + `cluster_report.csv` (+ optional diagnostic plot).
+
+    `pocket_expand_only` drops pooled frames whose `pocket_volume_proxy` has
+    not grown (by at least a `pocket_expand_margin` fraction) relative to
+    `top_pdb` -- the pre-MD reference structure -- *before* clustering, so
+    every representative structure comes from a frame where the pocket
+    opened up rather than closed down. This is a post-hoc selection over an
+    otherwise-unbiased restrained-MD ensemble, not a steering force during
+    sampling itself: `dd_af-sample` doesn't know about "pocket expansion" at
+    all, so nothing about how the frames were generated is affected, only
+    which of them are eligible to become a representative structure.
+
+    `pocket_expand_margin=0.0` (the default) was measured to barely filter
+    anything on a real sampling run (kept 10,000/10,000 pooled frames): a
+    convex hull is an envelope over its points, so thermal noise alone
+    tends to inflate it relative to any single static reference frame,
+    regardless of any real "opening" signal. A positive margin (e.g.
+    0.05-0.1) is needed for this flag to meaningfully narrow the pool --
+    see the `[cluster] pocket-expand-only: kept X/Y frame(s)` line this
+    prints to calibrate one for a given system.
+    """
     import mdtraj as md
+    import numpy as np
 
     # Atom indices are computed from `top_pdb` loaded on its own, not from
     # the pooled trajectory's topology: `mdtraj.join` (used below when
@@ -198,17 +256,40 @@ def cluster_pocket_trajectory(
     # identical across every replica (they all start from the same
     # `complex_top.pdb`), so computing it once, pre-join, is both correct
     # and cheaper.
-    atom_indices = _pocket_atom_indices(md.load(str(top_pdb)).topology, pocket_residues, atom_selection=cluster_atoms)
+    ref_traj = md.load(str(top_pdb))
+    atom_indices = _pocket_atom_indices(ref_traj.topology, pocket_residues, atom_selection=cluster_atoms)
     if not atom_indices:
         raise ValueError("cluster_pocket_trajectory: no pocket atoms found for the given residues/selection")
 
     traj, frame_replica, frame_time_ps = load_pooled_trajectory(top_pdb, dcd_paths)
+    volumes = pocket_volume_proxy(traj, atom_indices)
+
+    if pocket_expand_only:
+        reference_volume = float(pocket_volume_proxy(ref_traj, atom_indices)[0])
+        keep = volumes >= reference_volume * (1.0 + pocket_expand_margin)
+        n_kept = int(keep.sum())
+        if show_progress:
+            print(
+                f"[cluster] pocket-expand-only: kept {n_kept}/{traj.n_frames} frame(s) with pocket volume "
+                f">= {reference_volume * (1.0 + pocket_expand_margin):.2f} nm^3 "
+                f"(reference {reference_volume:.2f} nm^3)", flush=True,
+            )
+        if n_kept == 0:
+            raise ValueError(
+                "cluster_pocket_trajectory: --pocket-expand-only left 0 frames -- no pooled frame's pocket "
+                "grew past the reference volume (try a smaller --pocket-expand-margin, a longer --sample-ns, "
+                "or disable --pocket-expand-only)"
+            )
+        traj = traj.slice(np.where(keep)[0])
+        frame_replica = frame_replica[keep]
+        frame_time_ps = frame_time_ps[keep]
+        volumes = volumes[keep]
 
     rmsd_matrix = pairwise_rmsd_matrix(traj, atom_indices)
     labels = cluster_frames(rmsd_matrix, n_clusters)
     medoids = pick_medoids(rmsd_matrix, labels)
     rows = write_representative_structures(
-        traj, medoids, labels, rmsd_matrix, frame_replica, frame_time_ps, out_dir, show_progress=show_progress,
+        traj, medoids, labels, rmsd_matrix, frame_replica, frame_time_ps, volumes, out_dir, show_progress=show_progress,
     )
 
     total = sum(r.n_frames for r in rows)
