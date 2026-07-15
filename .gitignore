@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+*.html
+.pytest_cache/
+
+# All dd_af-fetch/-pocket/-sample/-cluster/-run outputs (reproducible via
+# the commands in README.md; no curated test fixtures are checked in yet)
+data/
