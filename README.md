@@ -1,54 +1,41 @@
+[English version](README.en.md)
+
 # dd_af
 
-Turns a static AlphaFold DB predicted structure into a small ensemble of
-receptor conformations suitable for ensemble docking: detects a druggable
-pocket, samples that pocket's local flexibility with restrained MD (only
-the pocket neighborhood moves -- the rest of the protein is position-
-restrained), and structurally clusters the resulting trajectory into a
-handful of representative conformations. Designed as a reusable package,
-not tied to any specific target (same philosophy as `dd_prep` / `dd_docking`
-/ `dd_overlay` / `dd_viewer` / `dd_confgen`) -- conceptually the middle
-stage of a `dd_prep` (AFDB fetch + MD-grade repair) -> **`dd_af`** (pocket
-detection + local restrained-MD sampling + clustering) -> `dd_docking`
-(ensemble docking against the generated conformations) pipeline. `dd_af`
-imports `dd_prep` directly for the fetch/repair step (AlphaFold models have
-none of the real-PDB-deposit quirks `dd_md`'s self-contained receptor prep
-exists to handle, so there was no reason to reimplement it here); it does
-not import `dd_docking`/`dd_md`, only mirrors their docking-box convention
-and harmonic-restraint mechanics respectively (see "Design notes" below).
+静的なAlphaFold DB予測構造を、アンサンブルドッキングに適した少数の受容体コンフォメーションからなるアンサンブルへと変換する: druggableなポケットを検出し、restrained MD（拘束付きMD、ポケット近傍のみが動き、蛋白質の残りは位置拘束される）でそのポケットの局所的な柔軟性をサンプリングし、得られたトラジェクトリを構造的にクラスタリングして少数の代表的なコンフォメーションにまとめる。特定のターゲットに依存しない再利用可能なパッケージとして設計されている（`dd_prep` / `dd_docking` / `dd_overlay` / `dd_viewer` / `dd_confgen` と同じ思想）——概念的には `dd_prep`（AFDB取得＋MDグレードの修復）→ **`dd_af`**（ポケット検出＋局所restrained-MDサンプリング＋クラスタリング）→ `dd_docking`（生成されたコンフォメーション群に対するアンサンブルドッキング）というパイプラインの中間段階にあたる。`dd_af` はfetch/repair段階のために `dd_prep` を直接importする（AlphaFoldモデルには `dd_md` の自己完結的な受容体前処理が対処すべき実PDB由来の癖が一切ないため、ここで再実装する理由はなかった）。`dd_docking`/`dd_md` はimportせず、それぞれのドッキングボックス規約とharmonic-restraint（調和拘束）機構を踏襲するのみである（後述の「設計メモ」参照）。
 
-- **Fetch (`dd_af-fetch`)**: UniProt accession -> AlphaFold DB model ->
-  MD-grade repair, delegating to `dd_prep.pipeline.fetch_and_prepare_afdb`.
-- **Pocket (`dd_af-pocket`)**: runs `fpocket` and selects a pocket by
-  Druggability Score rank (default: top-ranked), writing the pocket's
-  lining residues/center (`pocket_report.json`) and a docking box derived
-  from those residues' coordinates (`pocket_box.json`, since there is no
-  co-crystal ligand to derive one from -- these are apo structures).
-- **Sample (`dd_af-sample`)**: restrained MD, implicit solvent (GBn2 by
-  default, `--implicit-solvent`) or an explicit periodic water box
-  (`--solvent explicit`, `--water-model`), over a choice of protein
-  forcefield (`--protein-forcefield`). Residues outside the pocket
-  neighborhood are harmonically restrained to their starting positions;
-  only pocket-lining residues (plus anything within `--mobile-radius-nm` of
-  the pocket centroid) move freely. Runs several independent replicas
-  (`--n-replicas`) in parallel (`--n-jobs`).
-- **Cluster (`dd_af-cluster`)**: pools every replica's frames, computes a
-  pocket-atom RMSD distance matrix, and clusters it (`AgglomerativeClustering`,
-  average linkage) into `--n-clusters` representative structures (default
-  10), each the cluster's medoid frame (never a coordinate average).
-  `--pocket-expand-only` restricts clustering to frames where the pocket
-  has geometrically opened up relative to the pre-MD structure;
-  `--visualize` writes a standalone HTML overlay of every representative
-  structure.
-- **Run (`dd_af-run`)**: the four stages above, end-to-end.
+- **Fetch (`dd_af-fetch`)**: UniProtアクセッション番号 -> AlphaFold DBモデル ->
+  MDグレードの修復。`dd_prep.pipeline.fetch_and_prepare_afdb` に委譲する。
+- **Pocket (`dd_af-pocket`)**: `fpocket` を実行し、Druggability Scoreの順位で
+  ポケットを1つ選択する（デフォルトでは最上位）。選択したポケットの
+  裏打ち残基／中心座標を書き出し（`pocket_report.json`）、それらの残基の
+  座標から導出したドッキングボックスも出力する（`pocket_box.json`。共結晶
+  リガンドが存在しない——apo構造であるため——これらの残基座標から
+  ボックスを導出している）。
+- **Sample (`dd_af-sample`)**: restrained MD。暗黙的溶媒（implicit solvent、
+  デフォルトはGBn2、`--implicit-solvent`）または明示的な周期的水ボックス
+  （`--solvent explicit`、`--water-model`）を、選択可能な蛋白質フォースフィールド
+  （`--protein-forcefield`）の下で使用する。ポケット近傍の外側にある残基は
+  開始位置へ調和拘束（harmonically restrained）され、ポケット裏打ち残基
+  （加えてポケット重心から `--mobile-radius-nm` 以内にあるもの）のみが
+  自由に動く。複数の独立レプリカ（`--n-replicas`）を並列実行する
+  （`--n-jobs`）。
+- **Cluster (`dd_af-cluster`)**: 全レプリカのフレームをプールし、ポケット原子
+  のRMSD距離行列を計算して、クラスタリング（`AgglomerativeClustering`、
+  average linkage）により `--n-clusters` 個（デフォルト10）の代表構造に
+  まとめる。各代表構造はそのクラスタのmedoidフレームである（座標平均では
+  ない）。`--pocket-expand-only` はポケットがMD前の構造に対して幾何学的に
+  開いたフレームのみにクラスタリングを限定する。`--visualize` は全代表構造を
+  スタンドアロンのHTMLオーバーレイとして書き出す。
+- **Run (`dd_af-run`)**: 上記4段階をエンドツーエンドで実行する。
 
-## Installation
+## インストール
 
-Requires rdkit, numpy, pandas, pdbfixer, openmm, openmmforcefields, mdtraj,
-scikit-learn, scipy, py3Dmol, and the `dd_prep` package (for
-`dd_af-fetch`), plus the `fpocket` CLI binary (for `dd_af-pocket`). Best
-installed via conda-forge (the `mpro` env already has everything except
-`fpocket`):
+rdkit, numpy, pandas, pdbfixer, openmm, openmmforcefields, mdtraj,
+scikit-learn, scipy, py3Dmol、および `dd_prep` パッケージ（`dd_af-fetch`用）、
+さらに `fpocket` CLIバイナリ（`dd_af-pocket`用）が必要である。conda-forge
+経由でのインストールを推奨する（`mpro` envには `fpocket` 以外はすでに
+すべて揃っている）:
 
 ```bash
 conda install -n mpro -c conda-forge fpocket
@@ -56,32 +43,33 @@ cd dd_prep && pip install -e . && cd ..   # if not already installed
 cd dd_af && pip install -e .
 ```
 
-This installs five console commands: `dd_af-fetch`, `dd_af-pocket`,
-`dd_af-sample`, `dd_af-cluster`, `dd_af-run`.
+これにより5つのコンソールコマンドがインストールされる: `dd_af-fetch`、
+`dd_af-pocket`、`dd_af-sample`、`dd_af-cluster`、`dd_af-run`。
 
-## Usage
+## 使い方
 
-### 1. Fetch (`dd_af-fetch`)
+### 1. 取得 (`dd_af-fetch`)
 
 ```bash
 dd_af-fetch O60674 -o data/prepped
 ```
 
-Downloads the current AlphaFold DB model for human JAK2 (UniProt O60674)
-and MD-grade-repairs it (pLDDT-based terminal trimming, PDBFixer, pH 7.0
-protonation) via `dd_prep`, writing `data/prepped/o60674_md.pdb` (`dd_af-fetch`
-does not nest output under a `<uniprot>/` subdirectory -- only `dd_af-run`
-does, for its own multi-stage output layout below).
+ヒトJAK2（UniProt O60674）の現行AlphaFold DBモデルをダウンロードし、
+`dd_prep` 経由でMDグレードの修復（pLDDTに基づく末端トリミング、
+PDBFixer、pH 7.0でのプロトン化）を行い、`data/prepped/o60674_md.pdb` を
+書き出す（`dd_af-fetch` は出力を `<uniprot>/` サブディレクトリの下に
+ネストしない——それを行うのは以下の複数段階の出力レイアウトを持つ
+`dd_af-run` のみである）。
 
-### 2. Pocket detection (`dd_af-pocket`)
+### 2. ポケット検出 (`dd_af-pocket`)
 
 ```bash
 dd_af-pocket data/prepped/o60674_md.pdb -o data/prepped/o60674_pocket
 ```
 
-Runs fpocket and prints every detected pocket ranked by Druggability Score.
-Measured output on the JAK2 model above (87 candidate pockets found across
-the full multi-domain structure; abbreviated here):
+fpocketを実行し、検出された全ポケットをDruggability Scoreの順に出力する。
+上記のJAK2モデルで実測された出力（構造全体のマルチドメイン構造にわたって
+87個の候補ポケットが検出された。以下は抜粋）:
 
 ```
 [pocket 1] score=0.158  druggability=0.829  n_alpha_spheres=70
@@ -91,298 +79,304 @@ the full multi-domain structure; abbreviated here):
 [done] pocket rank 1 (druggability=0.829, 17 residue(s)) -> data/prepped/o60674_pocket/pocket_report.json
 ```
 
-`--pocket-rank N` selects a different rank (e.g. a known non-top-ranked
-allosteric site); `--pocket-residues A:42,A:87,...` bypasses fpocket's
-residue detection entirely for a manually-specified site.
+`--pocket-rank N` で別の順位を選択できる（例えば既知の非最上位アロステリック
+サイトなど）。`--pocket-residues A:42,A:87,...` はfpocketの残基検出を完全に
+バイパスして手動指定のサイトを使用する。
 
-### 3. Restrained-MD sampling (`dd_af-sample`)
+### 3. Restrained-MDサンプリング (`dd_af-sample`)
 
 ```bash
 dd_af-sample data/prepped/o60674_md.pdb data/prepped/o60674_pocket \
     -o data/sample/o60674 --n-replicas 4 --n-jobs 2
 ```
 
-Position-restrains every residue outside the pocket neighborhood (harmonic,
-`k=1000 kJ/mol/nm^2` by default -- the same value `dd_md/restraints.py`
-verified gives an RMS thermal fluctuation of ~0.86 A at 300 K, small next
-to the scale of pocket-shape differences clustering looks for) and runs
-`--n-replicas` independent implicit-solvent MD replicas. On the JAK2 pocket
-above, 17 lining residues plus everything within 1 nm of its centroid left
-49 of 1097 total residues mobile (`residues_mobile` in
-`restraint_report.json`) -- see "Performance" below for realistic timing on
-a target this large.
+ポケット近傍の外側にあるすべての残基を位置拘束し（harmonic、デフォルトで
+`k=1000 kJ/mol/nm^2` —— `dd_md/restraints.py` がこの値で300 Kにおいて
+熱揺らぎのRMSが~0.86 Åになることを検証済みであり、ポケット形状の
+違いというクラスタリングが探す対象のスケールに比べて小さい）、
+`--n-replicas` 個の独立した暗黙的溶媒MDレプリカを実行する。上記のJAK2
+ポケットの例では、17個の裏打ち残基とその重心から1 nm以内にあるすべての
+残基により、全1097残基のうち49残基が可動になった
+（`restraint_report.json` の `residues_mobile`）——これほど大きなターゲット
+での現実的な所要時間については後述の「性能」を参照。
 
-`--preset {default,quick}` bundles `--n-replicas`/`--equil-ps`/`--sample-ns`/
-`--report-ps`/`--timestep-fs`/`--implicit-solvent` into one flag; `--preset
-quick` is a coarse, CPU-only-friendly setting (2 replicas, 5 ps
-equilibration, 300 ps production, 2.5 ps report interval, `obc2` implicit
-solvent) for when only rough pocket-shape diversity is needed for downstream
-ensemble docking, not a converged trajectory -- reasonable given `dd_af`
-produces an ensemble of conformations rather than a single stability verdict
-in the first place (see "Limitations"). Any of those six flags given
-explicitly still overrides the preset's value for that one flag, e.g.
-`--preset quick --n-replicas 4`. `--timestep-fs` (default 4 fs, kept as-is by
-both presets) is exposed separately since it is the one value
-`restraints.py` empirically checked for stability against the default
-`k=1000 kJ/mol/nm^2` restraint -- raising it further is not a preset-driven
-trade-off.
+`--preset {default,quick}` は `--n-replicas`/`--equil-ps`/`--sample-ns`/
+`--report-ps`/`--timestep-fs`/`--implicit-solvent` を1つのフラグにまとめる。
+`--preset quick` はCPUのみでも扱いやすい粗い設定（2レプリカ、5 psの平衡化、
+300 psの本サンプリング、2.5 psのレポート間隔、`obc2` 暗黙的溶媒）であり、
+下流のアンサンブルドッキングにポケット形状の大まかな多様性さえ得られれば
+よく、収束したトラジェクトリまでは必要ない場合に用いる——`dd_af` はそもそも
+単一の安定性判定ではなくコンフォメーションのアンサンブルを生成するツール
+であることを踏まえれば妥当な設計である（「既知の限界」参照）。上記6つの
+フラグのいずれかを明示的に指定した場合、そのフラグに関してはpresetの値を
+上書きする。例: `--preset quick --n-replicas 4`。`--timestep-fs`（デフォルト
+4 fs、両presetともそのまま）は別扱いになっている。`restraints.py` が
+デフォルトの `k=1000 kJ/mol/nm^2` 拘束に対して安定性を実測検証した唯一の
+値であり、これ以上大きくすることはpreset側の判断に委ねられるトレード
+オフではないためである。
 
-`--implicit-solvent {gbn2,gbn,obc2,obc1,hct}` selects the GB model (default
-`gbn2`). Measured on this project's development machine (human lysozyme,
-P61626, ~2300 atoms, CPU/4 threads, ms/step relative to `gbn2`): `hct` 1.75x
-faster, `obc1` 1.55x, `obc2` 1.37x, `gbn` ~1.02x (`gbn2` = `gbn` plus a
-"neck" Born-radius correction term, which is nearly all of `gbn2`'s extra
-cost over `gbn`). `--preset quick` picks `obc2`: `hct`, the fastest, is the
-oldest GB model and is known to underestimate buried atoms' Born radii,
-which matters here since some pocket-lining side chains are partially
-buried; `obc2` fixes that at a smaller speed cost and is the de facto
-standard GB model in AMBER-family tooling (`igb=5`).
+`--implicit-solvent {gbn2,gbn,obc2,obc1,hct}` はGBモデルを選択する
+（デフォルト `gbn2`）。本プロジェクトの開発機で実測（ヒトリゾチーム、
+P61626、~2300原子、CPU/4スレッド、`gbn2` を基準としたms/stepの相対値）:
+`hct` は1.75倍高速、`obc1` は1.55倍、`obc2` は1.37倍、`gbn` は~1.02倍
+（`gbn2` は `gbn` に「neck」Born半径補正項を加えたものであり、これが
+`gbn` に対する追加コストのほぼ全てである）。`--preset quick` は `obc2` を
+選ぶ: 最速の `hct` は最も古いGBモデルであり、埋没原子のBorn半径を
+過小評価することが知られている。ここではポケット裏打ち側鎖の一部が
+部分的に埋没しているため、これは無視できない。`obc2` はわずかな速度上の
+コストでこれを解決しており、AMBER系ツール群における事実上の標準GB
+モデルである（`igb=5`）。
 
-### Forcefield and solvent model
+### フォースフィールドと溶媒モデル
 
 `--protein-forcefield {amber14-all,amber99sbildn,amber19-all,charmm36}`
-(default `amber14-all`) selects the protein XML(s); every combination with
-every `--implicit-solvent` model is verified to build. `--solvent
-{implicit,explicit}` (default `implicit`) switches between GB continuum
-solvent (the setting this project's other CPU-friendly defaults assume) and
-a real periodic water box. `--solvent explicit` needs `--water-model`,
-verified per `--protein-forcefield` (`sample.PROTEIN_FORCEFIELDS`):
+（デフォルト `amber14-all`）は蛋白質のXMLを選択する。すべての `--implicit-
+solvent` モデルとの全組み合わせがビルド可能であることを検証済みである。
+`--solvent {implicit,explicit}`（デフォルト `implicit`）は、GB連続溶媒
+（本プロジェクトの他のCPUフレンドリーなデフォルトが前提とする設定）と、
+実際の周期的水ボックスとを切り替える。`--solvent explicit` には
+`--water-model` の指定が必要であり、`--protein-forcefield` ごとに
+検証済みの組み合わせがある（`sample.PROTEIN_FORCEFIELDS`）:
 
-| `--protein-forcefield` | verified `--water-model` choices |
+| `--protein-forcefield` | 検証済みの `--water-model` の選択肢 |
 |---|---|
 | `amber14-all` | `tip3p`, `tip3pfb`, `tip4pew`, `tip4pfb`, `spce` |
 | `amber99sbildn` | `tip3p`, `tip4pew`, `tip5p` |
 | `amber19-all` | `tip3p`, `tip3pfb`, `tip4pew` |
 | `charmm36` | `tip3p`, `tip4pew`, `tip5p` |
 
-Explicit solvent also adds `--solvent-padding-nm` (solute-to-box-edge
-padding, default 1.0), `--ion-concentration-molar` (Na+/Cl- neutralizing/
-background concentration, default 0.15, physiological), and
-`--pressure-atm` (`MonteCarloBarostat` target, default 1.0 -- explicit runs
-are NPT, not NVT). Solvation (`Modeller.addSolvent`, which has no seed
-parameter) happens exactly once per `dd_af-sample` invocation, before any
-replica starts, and every replica loads that one shared, already-periodic
-structure -- re-solvating independently per replica would give each
-replica's DCD a different atom count/ordering than the `complex_top.pdb`
-`dd_af-cluster` loads them all against.
+明示的溶媒ではさらに `--solvent-padding-nm`（溶質からボックス端までの
+パディング、デフォルト1.0）、`--ion-concentration-molar`（Na+/Cl-の
+中和／背景濃度、デフォルト0.15、生理的濃度）、`--pressure-atm`
+（`MonteCarloBarostat` の目標値、デフォルト1.0——明示的溶媒のランはNVTでは
+なくNPTである）が追加される。溶媒和（`Modeller.addSolvent`、シード
+パラメータを持たない）は `dd_af-sample` の1回の呼び出しにつき、いずれの
+レプリカが始まる前にちょうど1回だけ行われ、すべてのレプリカがその
+共有済みの、既に周期的な構造を読み込む——レプリカごとに独立して溶媒和
+すると、各レプリカのDCDが `dd_af-cluster` が全レプリカに対して読み込む
+`complex_top.pdb` と異なる原子数／順序になってしまう。
 
-**Explicit solvent is dramatically slower than implicit on CPU** -- measured
-end-to-end on this project's development machine: human lysozyme solvated
-with ~0.6 nm padding (amber14-all + tip3p, 105,716 atoms total including
-water/ions, CPU, thread count unpinned) ran a full 1-replica correctness
-check (minimize -> 0.08 ps equilibration -> 20 ps production, `--n-jobs 1`)
-in 2,304 s wall, with production itself holding steady at ~87 s/ps once
-past the first couple of ps -- versus the same protein's own implicit-GBn2
-number in "Performance" below (~2,300 atoms, CPU/4 threads pinned,
-~0.09 s/step at a 4 fs timestep, i.e. ~22.7 s/ps). Already several-fold
-slower per ps even though this isn't a clean apples-to-apples comparison
-(the explicit system's 105,716 atoms is ~46x the implicit one's atom
-count, mostly water, and thread pinning differed between the two runs).
-The real-world takeaway is unambiguous either way: `--platform CUDA` is
-strongly recommended for any `--solvent explicit` run beyond a quick
-correctness check; `--solvent implicit` (the default) remains the
-practical choice for CPU-only environments (see "Performance" below).
-`dd_af-cluster` loading a `>99,999`-atom explicit-solvent `complex_top.pdb`
-also prints a `mdtraj... Need to guess atom number ...` warning -- benign,
-just the fixed-width PDB atom-serial field overflowing past 99,999
-(mdtraj tracks atoms by index regardless, not by that text field).
+**明示的溶媒はCPU上では暗黙的溶媒より劇的に遅い**——本プロジェクトの
+開発機で実測: ヒトリゾチームを~0.6 nmパディングで溶媒和した場合
+（amber14-all + tip3p、水・イオンを含めて合計105,716原子、CPU、
+スレッド数固定なし）、1レプリカの正しさ確認ラン（最小化 -> 0.08 ps平衡化
+-> 20 ps本サンプリング、`--n-jobs 1`）はwall時間で2,304秒かかり、本
+サンプリング自体は最初の数psを過ぎると~87 s/psで安定した——これに対し、
+同じ蛋白質自身の暗黙的GBn2での数値（後述の「性能」参照、~2,300
+原子、CPU/4スレッド固定、4 fsタイムステップで~0.09 s/step、すなわち
+~22.7 s/ps）と比べると、これは厳密なapples-to-apples比較ではないものの
+（明示的溶媒系の105,716原子は暗黙的溶媒系の原子数の約46倍、大半が水で
+あり、両ランでスレッド固定の扱いも異なる）、psあたりで見てすでに数倍
+遅い。実務上の結論はどちらにせよ明確である: 簡単な正しさ確認を超える
+`--solvent explicit` のランには `--platform CUDA` を強く推奨する。
+CPUのみの環境では `--solvent implicit`（デフォルト）が実用的な選択肢
+であり続ける（後述の「性能」参照）。`dd_af-cluster` が
+`>99,999` 原子の明示的溶媒 `complex_top.pdb` を読み込む際には
+`mdtraj... Need to guess atom number ...` という警告も出る——これは
+無害であり、固定幅PDBの原子シリアル番号フィールドが99,999を超えて
+オーバーフローしているだけである（mdtrajはこのテキストフィールドでは
+なく、インデックスで原子を追跡している）。
 
-### 4. Clustering (`dd_af-cluster`)
+### 4. クラスタリング (`dd_af-cluster`)
 
 ```bash
 dd_af-cluster data/sample/o60674 data/prepped/o60674_pocket -o data/clusters/o60674 --n-clusters 10
 ```
 
-Writes `cluster_00.pdb` (largest cluster) through `cluster_09.pdb`, plus
-`cluster_report.csv` (population, source replica/time, mean intra-cluster
-RMSD per representative, and each representative's `pocket_volume_nm3` --
-see below).
+`cluster_00.pdb`（最大のクラスタ）から `cluster_09.pdb` までを書き出し、
+さらに `cluster_report.csv`（母集団サイズ、由来レプリカ／時刻、代表構造
+ごとのクラスタ内平均RMSD、および各代表構造の `pocket_volume_nm3`——
+以下を参照）も出力する。
 
-#### Post-hoc pocket-expansion filtering (`--pocket-expand-only`)
+#### 事後的なポケット拡張フィルタリング (`--pocket-expand-only`)
 
-`cluster.pocket_volume_proxy` computes a cheap, no-rerun geometric proxy for
-"how open is the pocket": the convex-hull volume of the pocket-lining atoms
-(`--cluster-atoms`) in each pooled frame -- not fpocket's own cavity volume,
-which would mean re-running fpocket per frame, far too slow (see
-"Performance"). `--pocket-expand-only` restricts clustering to frames whose
-volume is `>= reference * (1 + --pocket-expand-margin)`, where `reference`
-is that same proxy computed on the pre-MD structure -- a post-hoc selection
-over an already-sampled, otherwise-unbiased ensemble (`dd_af-sample` itself
-knows nothing about "expansion"; nothing about how the frames were
-generated changes, only which of them are eligible to become a
-representative structure).
+`cluster.pocket_volume_proxy` は「ポケットがどれだけ開いているか」の
+安価な、再実行不要な幾何学的プロキシを計算する: 各プールされたフレーム
+におけるポケット裏打ち原子（`--cluster-atoms`）の凸包体積である——
+fpocket自身の空洞体積ではない。fpocketをフレームごとに再実行することに
+なり、あまりに遅すぎるためである（「性能」参照）。
+`--pocket-expand-only` は、体積が `>= reference * (1 + --pocket-expand-
+margin)` であるフレームのみにクラスタリングを限定する。`reference` は
+同じプロキシをMD前の構造に対して計算した値である——これはすでに
+サンプリング済みの、それ自体は偏りのないアンサンブルに対する後付けの
+選別であり（`dd_af-sample` 自体は「拡張」について何も知らない。フレームの
+生成のされ方は何も変わらず、どのフレームが代表構造の候補になり得るかが
+変わるだけである）。
 
-**Calibrate `--pocket-expand-margin` -- the default (0.0) barely filters
-anything.** A convex hull is an envelope over its points, so thermal noise
-alone tends to inflate it relative to any single static reference frame,
-regardless of any real "opening" signal -- measured on a real (if short)
-sampling run, margin 0.0 kept 10,000 of 10,000 pooled frames. `--pocket-
-expand-only` always prints `[cluster] pocket-expand-only: kept X/Y
-frame(s) ...`; start `--pocket-expand-margin` around 0.05-0.1 and adjust
-from that printed ratio rather than trusting the default to do anything.
+**`--pocket-expand-margin` は較正が必要である——デフォルト（0.0）では
+ほとんど何もフィルタされない。** 凸包はその点群を包む外皮であるため、
+実際の「開き」のシグナルとは無関係に、熱的なノイズだけで単一の静的な
+参照フレームに対して膨張する傾向がある——実際の（短い）サンプリング
+ランで実測したところ、マージン0.0では10,000フレーム中10,000フレームが
+そのまま残った。`--pocket-expand-only` は常に `[cluster] pocket-expand-
+only: kept X/Y frame(s) ...` を出力する。`--pocket-expand-margin` は
+0.05〜0.1あたりから始め、デフォルトが何かをしてくれると期待するのでは
+なく、この出力される比率を見ながら調整すること。
 
-#### Visual comparison (`--visualize`)
+#### 視覚的な比較 (`--visualize`)
 
-Writes `cluster_overlay.html` in `--out-dir`: a standalone (no server)
-py3Dmol scene with every `cluster_NN.pdb` loaded as its own model, each
-given a distinct color (translucent cartoon for the whole receptor, opaque
-sticks over the pocket-lining residues, since that's the part that actually
-varies between clusters -- everything else was frozen by `restraints.py`
-during sampling). No structural alignment step is needed first: every
-cluster PDB already shares dd_af's restrained-MD reference frame.  Opening
-the file needs internet access (3Dmol.js loads from a CDN, same as
-py3Dmol's normal Jupyter usage).
+`--out-dir` に `cluster_overlay.html` を書き出す: サーバ不要の
+スタンドアロンなpy3Dmolシーンで、各 `cluster_NN.pdb` がそれぞれ独立した
+モデルとして読み込まれ、それぞれに異なる色が割り当てられる（受容体
+全体は半透明のcartoon、ポケット裏打ち残基の部分は不透明のstickで表示
+される——実際にクラスタ間で変化するのはそこだけであり、それ以外の
+部分はサンプリング中 `restraints.py` によって固定されている）。事前の
+構造アラインメントは不要である: すべてのクラスタPDBはすでにdd_afの
+restrained-MDの基準フレームを共有している。このファイルを開くには
+インターネット接続が必要である（3Dmol.jsはCDNから読み込まれる。py3Dmol
+の通常のJupyter使用時と同様）。
 
-### End-to-end (`dd_af-run`)
+### エンドツーエンド (`dd_af-run`)
 
 ```bash
 dd_af-run O60674 -o data --n-replicas 4 --n-jobs 2 --n-clusters 10
 ```
 
-Runs all four stages, writing everything under `data/o60674/`.
+上記4段階すべてを実行し、`data/o60674/` 以下にすべてを書き出す。
 
-### Feeding the ensemble into `dd_docking`
+### アンサンブルを `dd_docking` に渡す
 
-The N representative structures are protein-only (apo) PDBs, directly
-usable as `dd_docking`'s ensemble-member input. Since there is no
-co-crystal ligand to derive a docking box from, use `pocket_box.json`'s
-box (center/size) for every member -- they share the same pocket
-definition and residue frame, so the box is consistent across all of them.
+N個の代表構造は蛋白質のみ（apo）のPDBであり、そのまま `dd_docking` の
+アンサンブルメンバー入力として使用できる。ドッキングボックスを導出する
+共結晶リガンドが存在しないため、`pocket_box.json` のボックス（中心／
+サイズ）を全メンバーに対して使用すること——それらは同じポケット定義と
+残基フレームを共有しているため、ボックスは全メンバーにわたって一貫して
+いる。
 
-## Design notes
+## 設計メモ
 
-- **Plain `openmm.app.ForceField`, not `SystemGenerator`.** `dd_docking/
-  refine_md.py` and `dd_md/system_build.py` need `SystemGenerator` because
-  their systems include a small-molecule ligand (GAFF/SMIRNOFF
-  parameterization). `dd_af`'s systems are apo -- never a ligand -- so a
-  plain `ForceField(...)` is all that's needed. This also sidesteps a real
-  environment issue: constructing a `SystemGenerator` without an explicit
-  `small_molecule_forcefield="gaff-*"` eagerly triggers `openff.toolkit`'s
-  SMIRNOFF force-field discovery, which fails in the `mpro` env with
-  `ModuleNotFoundError: No module named 'pkg_resources'`
-  (`openff-amber-ff-ports` depends on the `pkg_resources` API that
-  setuptools >= 81 no longer ships). Confirmed this does not affect
-  `dd_docking`/`dd_md`, since both always pass
-  `small_molecule_forcefield="gaff-2.11"` explicitly, a different
-  (GAFF) code path that never reaches the broken import.
-- **A curated, empirically-verified forcefield/water registry
-  (`sample.PROTEIN_FORCEFIELDS`), not "every XML OpenMM ships".** OpenMM
-  bundles far more protein/water/GB parameter files than dd_af exposes; an
-  untested pairing (e.g. an AMBER-parametrized GB file against CHARMM atom
-  types) can fail outright or silently build a mismatched system. Every
-  `--protein-forcefield` x `--implicit-solvent` combination and every
-  `--protein-forcefield` x `--water-model` combination actually listed was
-  confirmed (via `ForceField(...).createSystem(...)` / `Modeller.
-  addSolvent(...)` + `createSystem(...)`) to build successfully on this
-  project's development machine before being added.
-- **Explicit solvent is solvated exactly once per `dd_af-sample`
-  invocation, shared by every replica.** `Modeller.addSolvent` has no seed
-  parameter -- its ion placement is randomized -- so solvating
-  independently per replica (safe for the *implicit* system build, which is
-  deterministic) would give each replica's DCD a different atom count/
-  ordering than whatever `complex_top.pdb` `dd_af-cluster` ends up loading
-  every replica's DCD against. `sample.sample_pocket` solvates once,
-  writes the periodic structure to `solvated_input.pdb`, and every replica
-  loads that file as plain, deterministic input -- structurally identical
-  to how the apo (implicit) case already worked.
-- **`rigidWater=True` and a `MonteCarloBarostat` for explicit solvent
-  only.** Implicit systems have no water to make rigid (the flag has no
-  effect); explicit water is conventionally kept rigid (bond/angle
-  constraints, not hydrogen-mass-repartitioned) rather than integrated at
-  the protein's own 4 fs HMR timestep. The barostat runs NPT throughout
-  equilibration and production at `--pressure-atm` (default 1 atm) --
-  `restraints.py`'s harmonic (not literally frozen) restraints don't
-  prevent the barostat's periodic volume-rescaling trials, they just pull
-  restrained atoms back afterward, same as any other perturbation to a
-  restrained atom's position.
-- **`CutoffNonPeriodic`, not `NoCutoff`.** GBn2's Born-radius/GB-energy
-  terms already approximate the far-field electrostatic effect of distant
-  atoms, but the pairwise nonbonded loop itself is a naive O(n_atoms^2)
-  evaluation regardless of that approximation. For a large multi-domain
-  protein (full-length JAK2: 1132 residues, ~17800 atoms with hydrogens),
-  `NoCutoff` measured impractically slow even for a handful of picoseconds
-  on CPU. Since `restraints.py` freezes everything outside a ~1 nm pocket
-  neighborhood anyway, a 1.5 nm nonbonded cutoff (default,
-  `--nonbonded-cutoff-nm`) costs essentially no accuracy for the region
-  this project actually samples.
-- **CPU thread pinning across parallel replicas.** The CPU platform's
-  default thread count is normally "every logical core". Running several
-  replicas concurrently via `--n-jobs` without limiting each one's thread
-  count means N processes fight each other for the same cores instead of
-  actually running in parallel -- `sample_pocket` pins each replica's
-  thread count to `os.cpu_count() // n_workers` when `n_jobs != 1`, the
-  same pattern `dd_docking/screening.py` uses for parallel Vina workers
-  (`n_jobs == 1`, the default, leaves the thread count unpinned so a
-  single replica can use the whole machine).
+- **プレーンな `openmm.app.ForceField` であり、`SystemGenerator` ではない。**
+  `dd_docking/refine_md.py` と `dd_md/system_build.py` が `SystemGenerator`
+  を必要とするのは、そのシステムに低分子リガンドが含まれるためである
+  （GAFF/SMIRNOFFパラメータ化）。`dd_af` のシステムはapoであり——リガンドを
+  含むことは決してない——プレーンな `ForceField(...)` だけで十分である。
+  これは実際の環境上の問題も回避する: 明示的な
+  `small_molecule_forcefield="gaff-*"` を指定せずに `SystemGenerator` を
+  構築すると、`openff.toolkit` のSMIRNOFFフォースフィールド探索が即座に
+  トリガーされ、`mpro` env上では `ModuleNotFoundError: No module named
+  'pkg_resources'`（`openff-amber-ff-ports` がsetuptools >= 81ではもはや
+  提供されない `pkg_resources` APIに依存しているため）で失敗する。これが
+  `dd_docking`/`dd_md` に影響しないことは確認済みである。両者とも常に
+  `small_molecule_forcefield="gaff-2.11"` を明示的に渡しており、この壊れた
+  importに到達しない別の（GAFFの）コードパスを通るためである。
+- **精選され、実証済みのフォースフィールド／水モデルのレジストリ
+  （`sample.PROTEIN_FORCEFIELDS`）であり、「OpenMMが提供する全XML」では
+  ない。** OpenMMはdd_afが公開しているよりもはるかに多くの蛋白質／水／GB
+  パラメータファイルを同梱している。未検証の組み合わせ（例えばAMBERで
+  パラメータ化されたGBファイルをCHARMMの原子タイプに対して使うなど）は
+  完全に失敗するか、あるいは黙って不整合なシステムを構築してしまう
+  可能性がある。掲載されているすべての `--protein-forcefield` ×
+  `--implicit-solvent` の組み合わせ、および `--protein-forcefield` ×
+  `--water-model` の組み合わせは、追加される前に本プロジェクトの開発機上で
+  実際にビルドに成功することが（`ForceField(...).createSystem(...)` /
+  `Modeller.addSolvent(...)` + `createSystem(...)` により）確認されている。
+- **明示的溶媒は `dd_af-sample` の呼び出しにつきちょうど1回だけ溶媒和され、
+  全レプリカで共有される。** `Modeller.addSolvent` にはシードパラメータが
+  ない——そのイオン配置はランダム化される——そのためレプリカごとに独立に
+  溶媒和すると（これは*暗黙的*溶媒のシステム構築、つまり決定論的な処理
+  では問題にならない）、各レプリカのDCDが、`dd_af-cluster` が最終的に
+  全レプリカのDCDに対して読み込む `complex_top.pdb` と異なる原子数／
+  順序を持つことになってしまう。`sample.sample_pocket` は1回だけ溶媒和を
+  行い、周期的構造を `solvated_input.pdb` に書き出し、すべてのレプリカが
+  そのファイルをプレーンな、決定論的な入力として読み込む——apo
+  （暗黙的溶媒）の場合と構造的に同じ扱いである。
+- **明示的溶媒の場合のみ `rigidWater=True` と `MonteCarloBarostat` を使う。**
+  暗黙的溶媒のシステムには剛体化する水が存在しない（このフラグは効果を
+  持たない）。明示的溶媒の水は慣例的に剛体（結合・角度拘束であり、
+  水素質量再分配はしない）として扱われ、蛋白質自身の4 fsのHMR
+  タイムステップで積分されることはない。barostatは平衡化・本サンプリング
+  を通じて `--pressure-atm`（デフォルト1気圧）でNPTを実行し続ける——
+  `restraints.py` の調和拘束（文字通り凍結しているわけではない）は
+  barostatの周期的な体積リスケーリングの試行を妨げない。単に拘束された
+  原子を、他のあらゆる摂動と同様に、その後で元の位置へ引き戻すだけである。
+- **`NoCutoff` ではなく `CutoffNonPeriodic`。** GBn2のBorn半径／GBエネルギー
+  項はすでに遠方の原子による遠距離静電効果を近似しているが、pairwiseの
+  非結合ループ自体はその近似とは無関係に素朴なO(n_atoms^2)評価である。
+  大きなマルチドメイン蛋白質（全長JAK2: 1132残基、水素を含めて~17800
+  原子）では、`NoCutoff` はCPU上でわずか数psであっても実用に耐えないほど
+  遅いことが実測された。`restraints.py` はどのみちポケット近傍~1 nm圏外の
+  すべてを凍結するため、1.5 nmの非結合カットオフ（デフォルト、
+  `--nonbonded-cutoff-nm`）は、本プロジェクトが実際にサンプリングする
+  領域についてはほぼ精度上のコストを伴わない。
+- **並列レプリカ間でのCPUスレッドの固定。** CPUプラットフォームの
+  デフォルトのスレッド数は通常「すべての論理コア」である。`--n-jobs` で
+  複数レプリカを各自のスレッド数を制限せずに並行実行すると、N個の
+  プロセスが同じコアを奪い合うことになり、実際には並列に走らない——
+  `sample_pocket` は `n_jobs != 1` のとき各レプリカのスレッド数を
+  `os.cpu_count() // n_workers` に固定する。これは `dd_docking/
+  screening.py` が並列Vinaワーカーに対して使っているのと同じパターンで
+  ある（`n_jobs == 1`、デフォルトでは、単一レプリカがマシン全体を使える
+  ようスレッド数を固定しない）。
 
-## Performance
+## 性能
 
-Implicit-solvent (GBn2) CPU MD is not fast, and force-evaluation cost
-scales with total atom count even though only the pocket neighborhood is
-actually integrated (the restrained region still needs its forces
-computed every step). Measured end-to-end (`dd_af-sample`, 2 replicas via
-`--n-jobs 2`, ~8 CPU threads pinned per replica) on this project's
-development machine (a shared 16-core desktop, not a dedicated compute
-node):
+暗黙的溶媒（GBn2）のCPU MDは速くはなく、実際に積分されるのはポケット近傍
+のみであるにもかかわらず、力の評価コストは総原子数に応じてスケールする
+（拘束されている領域であっても毎ステップ力の計算が必要である）。実測
+（`dd_af-sample`、`--n-jobs 2` により2レプリカ、レプリカあたり~8個のCPU
+スレッドを固定）、本プロジェクトの開発機（共有の16コアデスクトップ、
+専用の計算ノードではない）:
 
-- Streptavidin (1STP, 121 residues, 1744 atoms with hydrogens): 5250
-  total steps (equilibration + production) per replica in 384 s wall --
-  ~0.073 s/step.
-- Human lysozyme (P61626, 146 residues, ~2300 atoms): 2100 steps per
-  replica in 232 s wall -- ~0.110 s/step.
-- Full-length JAK2 (O60674, 1132 residues, ~17800 atoms) is substantially
-  slower per step at the same thread count, purely from the larger
-  force-evaluation cost, even though `restraints.py` only lets ~50
-  residues actually move -- a short correctness-check run (525 steps) did
-  not finish within several CPU-minutes per thread when contending with
-  other jobs for cores on this shared machine. Budget accordingly (or use
-  a GPU) rather than assuming the small-protein numbers above scale
-  linearly with atom count; pocket detection (`dd_af-pocket`, fpocket) is
-  unaffected by protein size in practice -- it completed on JAK2 (87
-  candidate pockets, top-ranked druggability 0.829) in a few seconds.
+- Streptavidin（1STP、121残基、水素を含めて1744原子）: レプリカあたり
+  合計5250ステップ（平衡化＋本サンプリング）が384秒wallで完了——
+  ~0.073 s/step。
+- ヒトリゾチーム（P61626、146残基、~2300原子）: レプリカあたり2100ステップ
+  が232秒wallで完了——~0.110 s/step。
+- 全長JAK2（O60674、1132残基、~17800原子）は、`restraints.py` により
+  実際に動く残基は~50個に限られているにもかかわらず、単に力の評価
+  コストが大きいために同じスレッド数で1ステップあたり大幅に遅い——
+  短い正しさ確認ラン（525ステップ）は、この共有マシン上で他のジョブと
+  コアを奪い合っている状況では、スレッドあたり数CPU分以内には完了
+  しなかった。小さな蛋白質の上記の数値が原子数に対して線形にスケール
+  すると仮定するのではなく、それに応じて予算を確保すること（あるいは
+  GPUを使うこと）。ポケット検出（`dd_af-pocket`、fpocket）は蛋白質サイズの
+  影響を実質的に受けない——JAK2上でも（候補ポケット87個、最上位の
+  druggability 0.829）数秒で完了した。
 
-**Recommendations for practical turnaround:**
-- Prefer a CUDA GPU (`--platform CUDA`) for anything beyond a quick
-  correctness check -- implicit-solvent GB kernels are dramatically faster
-  on GPU than CPU.
-- For large multi-domain targets like full-length JAK2, consider providing
-  a smaller construct (e.g. an isolated kinase domain) if your workflow
-  allows it -- `dd_af` doesn't currently offer residue-range slicing, only
-  whole-chain selection via `dd_prep`.
-- Scale `--sample-ns`/`--equil-ps`/`--n-replicas` down for exploratory runs
-  and back up once you've confirmed the pipeline behaves as expected on
-  your hardware; there's no dedicated "screen then confirm" gate here (this
-  project makes an ensemble of conformations, not a single stability
-  verdict, so there's no natural place to cut a bad run short the way
-  `dd_md`'s screen-then-confirm flow does). `--preset quick` (see "Restrained-
-  MD sampling" above) is this scaled-down bundle -- including a cheaper GB
-  model (`--implicit-solvent obc2`) -- pre-picked for a CPU-only machine;
-  pair it with `--n-jobs -1` to also use every core.
+**実用的な所要時間のための推奨事項:**
+- 簡単な正しさ確認を超える用途にはCUDA GPU（`--platform CUDA`）を優先
+  すること——暗黙的溶媒のGBカーネルはCPUよりGPU上で劇的に高速である。
+- 全長JAK2のような大きなマルチドメインターゲットについては、ワークフロー
+  上可能であればより小さなコンストラクト（例えば孤立したキナーゼドメイン）
+  を提供することを検討すること——`dd_af` は現時点では残基範囲の
+  スライシングを提供しておらず、鎖単位での選択のみを `dd_prep` 経由で
+  提供している。
+- 探索的なランでは `--sample-ns`/`--equil-ps`/`--n-replicas` を小さくし、
+  自分のハードウェア上でパイプラインが想定通りに動作することを確認して
+  から元に戻すこと。ここには専用の「まずスクリーニングしてから確定」
+  というゲートは存在しない（このプロジェクトはコンフォメーションの
+  アンサンブルを作るものであり、単一の安定性判定を行うものではないため、
+  `dd_md` のスクリーニング→確定フローのように悪いランを早期に打ち切る
+  自然な場所がない）。`--preset quick`（上記「Restrained-MDサンプリング」
+  参照）はこの縮小版バンドルである——より安価なGBモデル
+  （`--implicit-solvent obc2`）も含め、CPUのみのマシン向けにあらかじめ
+  選ばれている。`--n-jobs -1` と組み合わせればすべてのコアも使用できる。
 
-## Limitations
+## 既知の限界
 
-- Being apo, `dd_af` cannot reproduce ligand-induced conformational change
-  (induced fit) -- only the unbound protein's own local flexibility around
-  a computationally-detected pocket. Combine with `dd_docking`'s own
-  induced-fit refinement (`dd_docking-refine`) downstream if that matters
-  for your target.
-- Pocket detection quality depends entirely on fpocket; a pocket it misses
-  or mis-scores cannot be recovered except via `--pocket-residues`'
-  manual override.
-- No residue-range slicing: `dd_af` samples whatever chain(s) `dd_prep`
-  fetched, which for a multi-domain protein may be far larger (and slower)
-  than the domain actually relevant to the pocket of interest.
+- apoであるため、`dd_af` はリガンド誘起のコンフォメーション変化
+  （induced fit）を再現できない——計算的に検出されたポケット周りの
+  非結合蛋白質自身の局所的な柔軟性のみである。ターゲットにとってこれが
+  重要な場合は、下流で `dd_docking` 自身のinduced-fitリファインメント
+  （`dd_docking-refine`）と組み合わせること。
+- ポケット検出の質は完全にfpocketに依存する。fpocketが見逃したり
+  誤ってスコア付けしたりしたポケットは、`--pocket-residues` による
+  手動指定を除いて回復できない。
+- 残基範囲のスライシングがない: `dd_af` は `dd_prep` が取得した鎖を
+  そのままサンプリングする。マルチドメイン蛋白質の場合、これは
+  対象のポケットに実際に関係するドメインよりもはるかに大きく
+  (そして遅く)なりうる。
 
-## Module layout
+## モジュール構成
 
-| Module | Purpose |
+| モジュール | 役割 |
 |---|---|
-| `pocket.py` | fpocket subprocess wrapper, Druggability Score ranking, pocket-residue/center extraction, docking-box computation |
-| `restraints.py` | Pocket-center-based harmonic position restraints (mobile-residue-set computation + `CustomExternalForce`) |
-| `sample.py` | Forcefield/water-model registry, implicit- and explicit-solvent system building, multi-replica restrained-MD sampling |
-| `cluster.py` | Pooled-trajectory RMSD clustering, medoid selection, pocket-volume proxy/filtering, representative-structure/report output |
-| `visualize.py` | Standalone py3Dmol HTML overlay of every cluster's representative structure |
-| `pipeline.py` | Per-stage orchestration functions plus `run_end_to_end` |
-| `cli.py` | `dd_af-fetch`/`dd_af-pocket`/`dd_af-sample`/`dd_af-cluster`/`dd_af-run` argparse entry points |
-| `progress.py` | Progress-line printing (per-replica, per-pocket, per-cluster, in-run OpenMM step reporter) |
-| `parallel.py` | `ProcessPoolExecutor`-based parallel map, copied from `dd_docking/parallel.py` |
+| `pocket.py` | fpocketのsubprocessラッパー、Druggability Scoreによるランキング、ポケット残基／中心座標の抽出、ドッキングボックスの計算 |
+| `restraints.py` | ポケット中心に基づく調和位置拘束(可動残基集合の計算 + `CustomExternalForce`) |
+| `sample.py` | フォースフィールド／水モデルのレジストリ、暗黙的・明示的溶媒でのシステム構築、複数レプリカのrestrained-MDサンプリング |
+| `cluster.py` | プールされたトラジェクトリのRMSDクラスタリング、medoid選択、ポケット体積プロキシ／フィルタリング、代表構造・レポートの出力 |
+| `visualize.py` | 各クラスタの代表構造のスタンドアロンpy3Dmol HTMLオーバーレイ |
+| `pipeline.py` | 各段階のオーケストレーション関数、および `run_end_to_end` |
+| `cli.py` | `dd_af-fetch`/`dd_af-pocket`/`dd_af-sample`/`dd_af-cluster`/`dd_af-run` のargparseエントリポイント |
+| `progress.py` | 進捗行の出力(レプリカごと、ポケットごと、クラスタごと、ラン中のOpenMMステップレポーター) |
+| `parallel.py` | `ProcessPoolExecutor`ベースの並列map。`dd_docking/parallel.py` からコピー |
