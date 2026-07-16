@@ -1,3 +1,5 @@
+[Japanese version](README.jp.md)
+
 # dd_af
 
 Turns a static AlphaFold DB predicted structure into a small ensemble of

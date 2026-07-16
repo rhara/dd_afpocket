@@ -1,5 +1,3 @@
-[English version](README.en.md)
-
 # dd_af
 
 静的なAlphaFold DB予測構造を、アンサンブルドッキングに適した少数の受容体コンフォメーションからなるアンサンブルへと変換する: druggableなポケットを検出し、restrained MD（拘束付きMD、ポケット近傍のみが動き、蛋白質の残りは位置拘束される）でそのポケットの局所的な柔軟性をサンプリングし、得られたトラジェクトリを構造的にクラスタリングして少数の代表的なコンフォメーションにまとめる。特定のターゲットに依存しない再利用可能なパッケージとして設計されている（`dd_prep` / `dd_docking` / `dd_overlay` / `dd_viewer` / `dd_confgen` と同じ思想）——概念的には `dd_prep`（AFDB取得＋MDグレードの修復）→ **`dd_af`**（ポケット検出＋局所restrained-MDサンプリング＋クラスタリング）→ `dd_docking`（生成されたコンフォメーション群に対するアンサンブルドッキング）というパイプラインの中間段階にあたる。`dd_af` はfetch/repair段階のために `dd_prep` を直接importする（AlphaFoldモデルには `dd_md` の自己完結的な受容体前処理が対処すべき実PDB由来の癖が一切ないため、ここで再実装する理由はなかった）。`dd_docking`/`dd_md` はimportせず、それぞれのドッキングボックス規約とharmonic-restraint（調和拘束）機構を踏襲するのみである（後述の「設計メモ」参照）。
