@@ -44,14 +44,15 @@ and harmonic-restraint mechanics respectively (see "Design notes" below).
 
 ## Installation
 
-Requires rdkit, numpy, pandas, pdbfixer, openmm, openmmforcefields, mdtraj,
-scikit-learn, scipy, py3Dmol, and the `dd_prep` package (for
-`dd_af-fetch`), plus the `fpocket` CLI binary (for `dd_af-pocket`). Best
-installed via conda-forge (the `mpro` env already has everything except
-`fpocket`):
+Requires rdkit, numpy, pandas, openmm, mdtraj, matplotlib, scipy,
+scikit-learn, py3Dmol (now declared in `pyproject.toml`'s `dependencies`),
+and the `dd_prep` package (for `dd_af-fetch` -- pdbfixer/openmmforcefields
+come in transitively through it), plus the `fpocket` CLI binary (for
+`dd_af-pocket`; not available via pip, conda-forge only). Best installed
+via conda-forge (the `dd` env already has everything except `fpocket`):
 
 ```bash
-conda install -n mpro -c conda-forge fpocket
+conda install -n dd -c conda-forge fpocket
 cd dd_prep && pip install -e . && cd ..   # if not already installed
 cd dd_af && pip install -e .
 ```

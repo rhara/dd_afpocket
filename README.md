@@ -31,14 +31,15 @@
 
 ## インストール
 
-rdkit, numpy, pandas, pdbfixer, openmm, openmmforcefields, mdtraj,
-scikit-learn, scipy, py3Dmol、および `dd_prep` パッケージ（`dd_af-fetch`用）、
-さらに `fpocket` CLIバイナリ（`dd_af-pocket`用）が必要である。conda-forge
-経由でのインストールを推奨する（`mpro` envには `fpocket` 以外はすでに
-すべて揃っている）:
+rdkit, numpy, pandas, openmm, mdtraj, matplotlib, scipy, scikit-learn,
+py3Dmol（`pyproject.toml`の`dependencies`に明記済み）、および `dd_prep`
+パッケージ（`dd_af-fetch`用、pdbfixer/openmmforcefieldsはこちら経由で
+入る）、さらに `fpocket` CLIバイナリ（`dd_af-pocket`用、pipでは入らない
+ためconda-forge必須）が必要である。conda-forge経由でのインストールを
+推奨する（`dd` envには `fpocket` 以外はすでにすべて揃っている）:
 
 ```bash
-conda install -n mpro -c conda-forge fpocket
+conda install -n dd -c conda-forge fpocket
 cd dd_prep && pip install -e . && cd ..   # if not already installed
 cd dd_af && pip install -e .
 ```
