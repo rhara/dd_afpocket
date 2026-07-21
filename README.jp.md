@@ -1,6 +1,6 @@
 # dd_afpocket — ポケット検出と拘束MDサンプリングの組み合わせ: AlphaFoldモデル1個から、ドッキング可能な受容体アンサンブルへ
 
-静的なAlphaFold DB予測構造を、アンサンブルドッキングに適した少数の受容体コンフォメーションからなるアンサンブルへと変換する: druggableなポケットを検出し、restrained MD（拘束付きMD、ポケット近傍のみが動き、蛋白質の残りは位置拘束される）でそのポケットの局所的な柔軟性をサンプリングし、得られたトラジェクトリを構造的にクラスタリングして少数の代表的なコンフォメーションにまとめる。特定のターゲットに依存しない再利用可能なパッケージとして設計されている（`dd_prep` / `dd_docking` / `dd_overlay` / `dd_viewer` / `dd_confgen` と同じ思想）——概念的には `dd_prep`（AFDB取得＋MDグレードの修復）→ **`dd_afpocket`**（ポケット検出＋局所restrained-MDサンプリング＋クラスタリング）→ `dd_docking`（生成されたコンフォメーション群に対するアンサンブルドッキング）というパイプラインの中間段階にあたる。`dd_afpocket` は他の`dd_*`プロジェクトへの実行時依存を一切持たない: `prep.py` がfetch/repair段階のAFDB専用ロジックを`dd_prep`からvendor（移植）して自己完結している（AlphaFoldモデルには `dd_md` の自己完結的な受容体前処理が対処すべき実PDB由来の癖が一切なく、`dd_prep`が他の消費者向けに提供する汎用的なPDB/ヘテロ原子分類/ドッキング用修復機構は不要なため、AFDB/MD修復のみの狭い経路だけを取り込んだ）。`dd_docking`/`dd_md` もimportせず、それぞれのドッキングボックス規約とharmonic-restraint（調和拘束）機構を踏襲するのみである（後述の「設計メモ」参照）。
+静的なAlphaFold DB予測構造を、アンサンブルドッキングに適した少数の受容体コンフォメーションからなるアンサンブルへと変換する: druggableなポケットを検出し、restrained MD（拘束付きMD、ポケット近傍のみが動き、蛋白質の残りは位置拘束される）でそのポケットの局所的な柔軟性をサンプリングし、得られたトラジェクトリを構造的にクラスタリングして少数の代表的なコンフォメーションにまとめる。特定のターゲットに依存しない再利用可能なパッケージとして設計されている。他プロジェクトへの実行時依存は一切ない完全自己完結型で、`prep.py` がfetch/repair段階のAFDB専用ロジックを内包している（AlphaFoldモデルには汎用的な構造前処理ツールチェーンが必要になるような実PDB由来の癖が一切ないため、AFDB/MD修復のみの狭い経路だけを実装した）。ポケット検出・restrained-MDサンプリング・クラスタリングもすべてこのパッケージ内で完結している（後述の「設計メモ」参照）。
 
 - **Fetch (`dd_afpocket-fetch`)**: UniProtアクセッション番号 -> AlphaFold DBモデル ->
   MDグレードの修復。`prep.py` の `fetch_and_prepare_afdb` を使用する。
@@ -30,10 +30,9 @@
 ## インストール
 
 rdkit, numpy, pandas, pdbfixer, openmm, mdtraj, matplotlib, scipy,
-scikit-learn, py3Dmol（すべて`pyproject.toml`の`dependencies`に明記済み——
-他の`dd_*`パッケージへの依存は一切ない）、さらに `fpocket` CLIバイナリ
-（`dd_afpocket-pocket`用、pipでは入らないためconda-forge必須）が必要である。
-他の`dd_*`プロジェクトとは独立した、専用のconda env `dd_afpocket`
+scikit-learn, py3Dmol（すべて`pyproject.toml`の`dependencies`に明記済み）、
+さらに `fpocket` CLIバイナリ（`dd_afpocket-pocket`用、pipでは入らないため
+conda-forge必須）が必要である。専用のconda env `dd_afpocket`
 （python 3.12）を使用する:
 
 ```bash
@@ -89,9 +88,9 @@ dd_afpocket-sample data/prepped/o60674_md.pdb data/prepped/o60674_pocket \
 ```
 
 ポケット近傍の外側にあるすべての残基を位置拘束し（harmonic、デフォルトで
-`k=1000 kJ/mol/nm^2` —— `dd_md/restraints.py` がこの値で300 Kにおいて
-熱揺らぎのRMSが~0.86 Åになることを検証済みであり、ポケット形状の
-違いというクラスタリングが探す対象のスケールに比べて小さい）、
+`k=1000 kJ/mol/nm^2` —— この値で300 Kにおいて熱揺らぎのRMSが~0.86 Åに
+なることを検証済みであり、ポケット形状の違いというクラスタリングが
+探す対象のスケールに比べて小さい）、
 `--n-replicas` 個の独立した暗黙的溶媒MDレプリカを実行する。上記のJAK2
 ポケットの例では、17個の裏打ち残基とその重心から1 nm以内にあるすべての
 残基により、全1097残基のうち49残基が可動になった
@@ -232,31 +231,19 @@ dd_afpocket-run O60674 -o data --n-replicas 4 --n-jobs 2 --n-clusters 10
 
 上記4段階すべてを実行し、`data/o60674/` 以下にすべてを書き出す。
 
-### アンサンブルを `dd_docking` に渡す
-
-N個の代表構造は蛋白質のみ（apo）のPDBであり、そのまま `dd_docking` の
-アンサンブルメンバー入力として使用できる。ドッキングボックスを導出する
-共結晶リガンドが存在しないため、`pocket_box.json` のボックス（中心／
-サイズ）を全メンバーに対して使用すること——それらは同じポケット定義と
-残基フレームを共有しているため、ボックスは全メンバーにわたって一貫して
-いる。
-
 ## 設計メモ
 
 - **プレーンな `openmm.app.ForceField` であり、`SystemGenerator` ではない。**
-  `dd_docking/refine_md.py` と `dd_md/system_build.py` が `SystemGenerator`
-  を必要とするのは、そのシステムに低分子リガンドが含まれるためである
-  （GAFF/SMIRNOFFパラメータ化）。`dd_afpocket` のシステムはapoであり——リガンドを
+  `SystemGenerator` が必要になるのは、システムに低分子リガンドが含まれる
+  場合である（GAFF/SMIRNOFFパラメータ化）。`dd_afpocket` のシステムはapoであり——リガンドを
   含むことは決してない——プレーンな `ForceField(...)` だけで十分である。
   これは実際の環境上の問題も回避する: 明示的な
   `small_molecule_forcefield="gaff-*"` を指定せずに `SystemGenerator` を
   構築すると、`openff.toolkit` のSMIRNOFFフォースフィールド探索が即座に
-  トリガーされ、`mpro` env上では `ModuleNotFoundError: No module named
-  'pkg_resources'`（`openff-amber-ff-ports` がsetuptools >= 81ではもはや
-  提供されない `pkg_resources` APIに依存しているため）で失敗する。これが
-  `dd_docking`/`dd_md` に影響しないことは確認済みである。両者とも常に
-  `small_molecule_forcefield="gaff-2.11"` を明示的に渡しており、この壊れた
-  importに到達しない別の（GAFFの）コードパスを通るためである。
+  トリガーされ、`ModuleNotFoundError: No module named 'pkg_resources'`
+  （`openff-amber-ff-ports` がsetuptools >= 81ではもはや提供されない
+  `pkg_resources` APIに依存しているため）で失敗することがある——そもそも
+  `SystemGenerator` を必要としないことで、この問題自体を完全に回避している。
 - **精選され、実証済みのフォースフィールド／水モデルのレジストリ
   （`sample.PROTEIN_FORCEFIELDS`）であり、「OpenMMが提供する全XML」では
   ない。** OpenMMはdd_afpocketが公開しているよりもはるかに多くの蛋白質／水／GB
@@ -301,10 +288,8 @@ N個の代表構造は蛋白質のみ（apo）のPDBであり、そのまま `dd
   複数レプリカを各自のスレッド数を制限せずに並行実行すると、N個の
   プロセスが同じコアを奪い合うことになり、実際には並列に走らない——
   `sample_pocket` は `n_jobs != 1` のとき各レプリカのスレッド数を
-  `os.cpu_count() // n_workers` に固定する。これは `dd_docking/
-  screening.py` が並列Vinaワーカーに対して使っているのと同じパターンで
-  ある（`n_jobs == 1`、デフォルトでは、単一レプリカがマシン全体を使える
-  ようスレッド数を固定しない）。
+  `os.cpu_count() // n_workers` に固定する（`n_jobs == 1`、デフォルトでは、
+  単一レプリカがマシン全体を使えるようスレッド数を固定しない）。
 
 ## 性能
 
@@ -344,8 +329,7 @@ N個の代表構造は蛋白質のみ（apo）のPDBであり、そのまま `dd
   から元に戻すこと。ここには専用の「まずスクリーニングしてから確定」
   というゲートは存在しない（このプロジェクトはコンフォメーションの
   アンサンブルを作るものであり、単一の安定性判定を行うものではないため、
-  `dd_md` のスクリーニング→確定フローのように悪いランを早期に打ち切る
-  自然な場所がない）。`--preset quick`（上記「Restrained-MDサンプリング」
+  悪いランを早期に打ち切る自然な場所がない）。`--preset quick`（上記「Restrained-MDサンプリング」
   参照）はこの縮小版バンドルである——より安価なGBモデル
   （`--implicit-solvent obc2`）も含め、CPUのみのマシン向けにあらかじめ
   選ばれている。`--n-jobs -1` と組み合わせればすべてのコアも使用できる。
@@ -354,9 +338,7 @@ N個の代表構造は蛋白質のみ（apo）のPDBであり、そのまま `dd
 
 - apoであるため、`dd_afpocket` はリガンド誘起のコンフォメーション変化
   （induced fit）を再現できない——計算的に検出されたポケット周りの
-  非結合蛋白質自身の局所的な柔軟性のみである。ターゲットにとってこれが
-  重要な場合は、下流で `dd_docking` 自身のinduced-fitリファインメント
-  （`dd_docking-refine`）と組み合わせること。
+  非結合蛋白質自身の局所的な柔軟性のみである。
 - ポケット検出の質は完全にfpocketに依存する。fpocketが見逃したり
   誤ってスコア付けしたりしたポケットは、`--pocket-residues` による
   手動指定を除いて回復できない。
@@ -377,4 +359,4 @@ N個の代表構造は蛋白質のみ（apo）のPDBであり、そのまま `dd
 | `pipeline.py` | 各段階のオーケストレーション関数、および `run_end_to_end` |
 | `cli.py` | `dd_afpocket-fetch`/`dd_afpocket-pocket`/`dd_afpocket-sample`/`dd_afpocket-cluster`/`dd_afpocket-run` のargparseエントリポイント |
 | `progress.py` | 進捗行の出力(レプリカごと、ポケットごと、クラスタごと、ラン中のOpenMMステップレポーター) |
-| `parallel.py` | `ProcessPoolExecutor`ベースの並列map。`dd_docking/parallel.py` からコピー |
+| `parallel.py` | `ProcessPoolExecutor`ベースの並列map |

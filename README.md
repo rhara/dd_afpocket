@@ -8,19 +8,13 @@ pocket, samples that pocket's local flexibility with restrained MD (only
 the pocket neighborhood moves -- the rest of the protein is position-
 restrained), and structurally clusters the resulting trajectory into a
 handful of representative conformations. Designed as a reusable package,
-not tied to any specific target (same philosophy as `dd_prep` / `dd_docking`
-/ `dd_overlay` / `dd_viewer` / `dd_confgen`) -- conceptually the middle
-stage of a `dd_prep` (AFDB fetch + MD-grade repair) -> **`dd_afpocket`** (pocket
-detection + local restrained-MD sampling + clustering) -> `dd_docking`
-(ensemble docking against the generated conformations) pipeline. `dd_afpocket`
-has no inter-repo runtime dependency: `prep.py` carries its own AFDB-only
-fetch + MD-grade repair logic, vendored from `dd_prep` (AlphaFold models have
-none of the real-PDB-deposit quirks `dd_md`'s self-contained receptor prep
-exists to handle, so only the narrow AFDB/MD-repair path was needed, not the
-general PDB/hetero-classification/docking-repair machinery `dd_prep` provides
-its other consumers); it does not import `dd_docking`/`dd_md` either, only
-mirrors their docking-box convention and harmonic-restraint mechanics
-respectively (see "Design notes" below).
+not tied to any specific target. Fully self-contained, with no other
+runtime dependency: `prep.py` carries its own AFDB-only fetch + MD-grade
+repair logic (AlphaFold models have none of the real-PDB-deposit quirks
+that would otherwise call for a general-purpose structure-prep toolchain,
+so only the narrow AFDB/MD-repair path was implemented), and pocket
+detection, restrained-MD sampling, and clustering are all implemented
+directly in this package (see "Design notes" below).
 
 - **Fetch (`dd_afpocket-fetch`)**: UniProt accession -> AlphaFold DB model ->
   MD-grade repair, via `prep.py`'s `fetch_and_prepare_afdb`.
@@ -50,11 +44,10 @@ respectively (see "Design notes" below).
 ## Installation
 
 Requires rdkit, numpy, pandas, pdbfixer, openmm, mdtraj, matplotlib, scipy,
-scikit-learn, py3Dmol (all declared in `pyproject.toml`'s `dependencies` --
-no other `dd_*` package is required), plus the `fpocket` CLI binary (for
-`dd_afpocket-pocket`; not available via pip, conda-forge only). Uses its own
-dedicated conda env `dd_afpocket` (python 3.12), independent of the other
-`dd_*` projects:
+scikit-learn, py3Dmol (all declared in `pyproject.toml`'s `dependencies`),
+plus the `fpocket` CLI binary (for `dd_afpocket-pocket`; not available via
+pip, conda-forge only). Uses its own dedicated conda env `dd_afpocket`
+(python 3.12):
 
 ```bash
 mamba create -n dd_afpocket -c conda-forge python=3.12 rdkit numpy pandas pdbfixer openmm mdtraj matplotlib scipy scikit-learn py3dmol pytest fpocket
@@ -108,9 +101,9 @@ dd_afpocket-sample data/prepped/o60674_md.pdb data/prepped/o60674_pocket \
 ```
 
 Position-restrains every residue outside the pocket neighborhood (harmonic,
-`k=1000 kJ/mol/nm^2` by default -- the same value `dd_md/restraints.py`
-verified gives an RMS thermal fluctuation of ~0.86 A at 300 K, small next
-to the scale of pocket-shape differences clustering looks for) and runs
+`k=1000 kJ/mol/nm^2` by default -- verified to give an RMS thermal
+fluctuation of ~0.86 A at 300 K, small next to the scale of pocket-shape
+differences clustering looks for) and runs
 `--n-replicas` independent implicit-solvent MD replicas. On the JAK2 pocket
 above, 17 lining residues plus everything within 1 nm of its centroid left
 49 of 1097 total residues mobile (`residues_mobile` in
@@ -246,30 +239,19 @@ dd_afpocket-run O60674 -o data --n-replicas 4 --n-jobs 2 --n-clusters 10
 
 Runs all four stages, writing everything under `data/o60674/`.
 
-### Feeding the ensemble into `dd_docking`
-
-The N representative structures are protein-only (apo) PDBs, directly
-usable as `dd_docking`'s ensemble-member input. Since there is no
-co-crystal ligand to derive a docking box from, use `pocket_box.json`'s
-box (center/size) for every member -- they share the same pocket
-definition and residue frame, so the box is consistent across all of them.
-
 ## Design notes
 
-- **Plain `openmm.app.ForceField`, not `SystemGenerator`.** `dd_docking/
-  refine_md.py` and `dd_md/system_build.py` need `SystemGenerator` because
-  their systems include a small-molecule ligand (GAFF/SMIRNOFF
+- **Plain `openmm.app.ForceField`, not `SystemGenerator`.** `SystemGenerator`
+  exists for systems that include a small-molecule ligand (GAFF/SMIRNOFF
   parameterization). `dd_afpocket`'s systems are apo -- never a ligand -- so a
   plain `ForceField(...)` is all that's needed. This also sidesteps a real
   environment issue: constructing a `SystemGenerator` without an explicit
   `small_molecule_forcefield="gaff-*"` eagerly triggers `openff.toolkit`'s
-  SMIRNOFF force-field discovery, which fails in the `mpro` env with
+  SMIRNOFF force-field discovery, which can fail with
   `ModuleNotFoundError: No module named 'pkg_resources'`
   (`openff-amber-ff-ports` depends on the `pkg_resources` API that
-  setuptools >= 81 no longer ships). Confirmed this does not affect
-  `dd_docking`/`dd_md`, since both always pass
-  `small_molecule_forcefield="gaff-2.11"` explicitly, a different
-  (GAFF) code path that never reaches the broken import.
+  setuptools >= 81 no longer ships) -- avoided entirely by not needing
+  `SystemGenerator` in the first place.
 - **A curated, empirically-verified forcefield/water registry
   (`sample.PROTEIN_FORCEFIELDS`), not "every XML OpenMM ships".** OpenMM
   bundles far more protein/water/GB parameter files than dd_afpocket exposes; an
@@ -315,8 +297,7 @@ definition and residue frame, so the box is consistent across all of them.
   replicas concurrently via `--n-jobs` without limiting each one's thread
   count means N processes fight each other for the same cores instead of
   actually running in parallel -- `sample_pocket` pins each replica's
-  thread count to `os.cpu_count() // n_workers` when `n_jobs != 1`, the
-  same pattern `dd_docking/screening.py` uses for parallel Vina workers
+  thread count to `os.cpu_count() // n_workers` when `n_jobs != 1`
   (`n_jobs == 1`, the default, leaves the thread count unpinned so a
   single replica can use the whole machine).
 
@@ -358,8 +339,7 @@ node):
   and back up once you've confirmed the pipeline behaves as expected on
   your hardware; there's no dedicated "screen then confirm" gate here (this
   project makes an ensemble of conformations, not a single stability
-  verdict, so there's no natural place to cut a bad run short the way
-  `dd_md`'s screen-then-confirm flow does). `--preset quick` (see "Restrained-
+  verdict, so there's no natural place to cut a bad run short). `--preset quick` (see "Restrained-
   MD sampling" above) is this scaled-down bundle -- including a cheaper GB
   model (`--implicit-solvent obc2`) -- pre-picked for a CPU-only machine;
   pair it with `--n-jobs -1` to also use every core.
@@ -368,9 +348,7 @@ node):
 
 - Being apo, `dd_afpocket` cannot reproduce ligand-induced conformational change
   (induced fit) -- only the unbound protein's own local flexibility around
-  a computationally-detected pocket. Combine with `dd_docking`'s own
-  induced-fit refinement (`dd_docking-refine`) downstream if that matters
-  for your target.
+  a computationally-detected pocket.
 - Pocket detection quality depends entirely on fpocket; a pocket it misses
   or mis-scores cannot be recovered except via `--pocket-residues`'
   manual override.
@@ -390,4 +368,4 @@ node):
 | `pipeline.py` | Per-stage orchestration functions plus `run_end_to_end` |
 | `cli.py` | `dd_afpocket-fetch`/`dd_afpocket-pocket`/`dd_afpocket-sample`/`dd_afpocket-cluster`/`dd_afpocket-run` argparse entry points |
 | `progress.py` | Progress-line printing (per-replica, per-pocket, per-cluster, in-run OpenMM step reporter) |
-| `parallel.py` | `ProcessPoolExecutor`-based parallel map, copied from `dd_docking/parallel.py` |
+| `parallel.py` | `ProcessPoolExecutor`-based parallel map |
