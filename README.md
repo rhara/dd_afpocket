@@ -1,6 +1,6 @@
 [Japanese version](README.jp.md)
 
-# dd_af
+# dd_afpocket
 
 Turns a static AlphaFold DB predicted structure into a small ensemble of
 receptor conformations suitable for ensemble docking: detects a druggable
@@ -10,23 +10,23 @@ restrained), and structurally clusters the resulting trajectory into a
 handful of representative conformations. Designed as a reusable package,
 not tied to any specific target (same philosophy as `dd_prep` / `dd_docking`
 / `dd_overlay` / `dd_viewer` / `dd_confgen`) -- conceptually the middle
-stage of a `dd_prep` (AFDB fetch + MD-grade repair) -> **`dd_af`** (pocket
+stage of a `dd_prep` (AFDB fetch + MD-grade repair) -> **`dd_afpocket`** (pocket
 detection + local restrained-MD sampling + clustering) -> `dd_docking`
-(ensemble docking against the generated conformations) pipeline. `dd_af`
+(ensemble docking against the generated conformations) pipeline. `dd_afpocket`
 imports `dd_prep` directly for the fetch/repair step (AlphaFold models have
 none of the real-PDB-deposit quirks `dd_md`'s self-contained receptor prep
 exists to handle, so there was no reason to reimplement it here); it does
 not import `dd_docking`/`dd_md`, only mirrors their docking-box convention
 and harmonic-restraint mechanics respectively (see "Design notes" below).
 
-- **Fetch (`dd_af-fetch`)**: UniProt accession -> AlphaFold DB model ->
+- **Fetch (`dd_afpocket-fetch`)**: UniProt accession -> AlphaFold DB model ->
   MD-grade repair, delegating to `dd_prep.pipeline.fetch_and_prepare_afdb`.
-- **Pocket (`dd_af-pocket`)**: runs `fpocket` and selects a pocket by
+- **Pocket (`dd_afpocket-pocket`)**: runs `fpocket` and selects a pocket by
   Druggability Score rank (default: top-ranked), writing the pocket's
   lining residues/center (`pocket_report.json`) and a docking box derived
   from those residues' coordinates (`pocket_box.json`, since there is no
   co-crystal ligand to derive one from -- these are apo structures).
-- **Sample (`dd_af-sample`)**: restrained MD, implicit solvent (GBn2 by
+- **Sample (`dd_afpocket-sample`)**: restrained MD, implicit solvent (GBn2 by
   default, `--implicit-solvent`) or an explicit periodic water box
   (`--solvent explicit`, `--water-model`), over a choice of protein
   forcefield (`--protein-forcefield`). Residues outside the pocket
@@ -34,7 +34,7 @@ and harmonic-restraint mechanics respectively (see "Design notes" below).
   only pocket-lining residues (plus anything within `--mobile-radius-nm` of
   the pocket centroid) move freely. Runs several independent replicas
   (`--n-replicas`) in parallel (`--n-jobs`).
-- **Cluster (`dd_af-cluster`)**: pools every replica's frames, computes a
+- **Cluster (`dd_afpocket-cluster`)**: pools every replica's frames, computes a
   pocket-atom RMSD distance matrix, and clusters it (`AgglomerativeClustering`,
   average linkage) into `--n-clusters` representative structures (default
   10), each the cluster's medoid frame (never a coordinate average).
@@ -42,44 +42,45 @@ and harmonic-restraint mechanics respectively (see "Design notes" below).
   has geometrically opened up relative to the pre-MD structure;
   `--visualize` writes a standalone HTML overlay of every representative
   structure.
-- **Run (`dd_af-run`)**: the four stages above, end-to-end.
+- **Run (`dd_afpocket-run`)**: the four stages above, end-to-end.
 
 ## Installation
 
 Requires rdkit, numpy, pandas, openmm, mdtraj, matplotlib, scipy,
 scikit-learn, py3Dmol (now declared in `pyproject.toml`'s `dependencies`),
-and the `dd_prep` package (for `dd_af-fetch` -- pdbfixer/openmmforcefields
+and the `dd_prep` package (for `dd_afpocket-fetch` -- pdbfixer/openmmforcefields
 come in transitively through it), plus the `fpocket` CLI binary (for
-`dd_af-pocket`; not available via pip, conda-forge only). Best installed
-via conda-forge (the `dd` env already has everything except `fpocket`):
+`dd_afpocket-pocket`; not available via pip, conda-forge only). Uses its own
+dedicated conda env `dd_afpocket` (python 3.12), independent of the other
+`dd_*` projects:
 
 ```bash
-conda install -n dd -c conda-forge fpocket
-cd dd_prep && pip install -e . && cd ..   # if not already installed
-cd dd_af && pip install -e .
+mamba create -n dd_afpocket -c conda-forge python=3.12 rdkit numpy pandas openmm mdtraj matplotlib scipy scikit-learn py3dmol pytest fpocket
+/opt/miniforge3/envs/dd_afpocket/bin/pip install --no-deps -e ../dd_prep   # if not already installed
+/opt/miniforge3/envs/dd_afpocket/bin/pip install --no-deps -e .
 ```
 
-This installs five console commands: `dd_af-fetch`, `dd_af-pocket`,
-`dd_af-sample`, `dd_af-cluster`, `dd_af-run`.
+This installs five console commands: `dd_afpocket-fetch`, `dd_afpocket-pocket`,
+`dd_afpocket-sample`, `dd_afpocket-cluster`, `dd_afpocket-run`.
 
 ## Usage
 
-### 1. Fetch (`dd_af-fetch`)
+### 1. Fetch (`dd_afpocket-fetch`)
 
 ```bash
-dd_af-fetch O60674 -o data/prepped
+dd_afpocket-fetch O60674 -o data/prepped
 ```
 
 Downloads the current AlphaFold DB model for human JAK2 (UniProt O60674)
 and MD-grade-repairs it (pLDDT-based terminal trimming, PDBFixer, pH 7.0
-protonation) via `dd_prep`, writing `data/prepped/o60674_md.pdb` (`dd_af-fetch`
-does not nest output under a `<uniprot>/` subdirectory -- only `dd_af-run`
+protonation) via `dd_prep`, writing `data/prepped/o60674_md.pdb` (`dd_afpocket-fetch`
+does not nest output under a `<uniprot>/` subdirectory -- only `dd_afpocket-run`
 does, for its own multi-stage output layout below).
 
-### 2. Pocket detection (`dd_af-pocket`)
+### 2. Pocket detection (`dd_afpocket-pocket`)
 
 ```bash
-dd_af-pocket data/prepped/o60674_md.pdb -o data/prepped/o60674_pocket
+dd_afpocket-pocket data/prepped/o60674_md.pdb -o data/prepped/o60674_pocket
 ```
 
 Runs fpocket and prints every detected pocket ranked by Druggability Score.
@@ -98,10 +99,10 @@ the full multi-domain structure; abbreviated here):
 allosteric site); `--pocket-residues A:42,A:87,...` bypasses fpocket's
 residue detection entirely for a manually-specified site.
 
-### 3. Restrained-MD sampling (`dd_af-sample`)
+### 3. Restrained-MD sampling (`dd_afpocket-sample`)
 
 ```bash
-dd_af-sample data/prepped/o60674_md.pdb data/prepped/o60674_pocket \
+dd_afpocket-sample data/prepped/o60674_md.pdb data/prepped/o60674_pocket \
     -o data/sample/o60674 --n-replicas 4 --n-jobs 2
 ```
 
@@ -120,7 +121,7 @@ a target this large.
 quick` is a coarse, CPU-only-friendly setting (2 replicas, 5 ps
 equilibration, 300 ps production, 2.5 ps report interval, `obc2` implicit
 solvent) for when only rough pocket-shape diversity is needed for downstream
-ensemble docking, not a converged trajectory -- reasonable given `dd_af`
+ensemble docking, not a converged trajectory -- reasonable given `dd_afpocket`
 produces an ensemble of conformations rather than a single stability verdict
 in the first place (see "Limitations"). Any of those six flags given
 explicitly still overrides the preset's value for that one flag, e.g.
@@ -163,11 +164,11 @@ padding, default 1.0), `--ion-concentration-molar` (Na+/Cl- neutralizing/
 background concentration, default 0.15, physiological), and
 `--pressure-atm` (`MonteCarloBarostat` target, default 1.0 -- explicit runs
 are NPT, not NVT). Solvation (`Modeller.addSolvent`, which has no seed
-parameter) happens exactly once per `dd_af-sample` invocation, before any
+parameter) happens exactly once per `dd_afpocket-sample` invocation, before any
 replica starts, and every replica loads that one shared, already-periodic
 structure -- re-solvating independently per replica would give each
 replica's DCD a different atom count/ordering than the `complex_top.pdb`
-`dd_af-cluster` loads them all against.
+`dd_afpocket-cluster` loads them all against.
 
 **Explicit solvent is dramatically slower than implicit on CPU** -- measured
 end-to-end on this project's development machine: human lysozyme solvated
@@ -185,15 +186,15 @@ The real-world takeaway is unambiguous either way: `--platform CUDA` is
 strongly recommended for any `--solvent explicit` run beyond a quick
 correctness check; `--solvent implicit` (the default) remains the
 practical choice for CPU-only environments (see "Performance" below).
-`dd_af-cluster` loading a `>99,999`-atom explicit-solvent `complex_top.pdb`
+`dd_afpocket-cluster` loading a `>99,999`-atom explicit-solvent `complex_top.pdb`
 also prints a `mdtraj... Need to guess atom number ...` warning -- benign,
 just the fixed-width PDB atom-serial field overflowing past 99,999
 (mdtraj tracks atoms by index regardless, not by that text field).
 
-### 4. Clustering (`dd_af-cluster`)
+### 4. Clustering (`dd_afpocket-cluster`)
 
 ```bash
-dd_af-cluster data/sample/o60674 data/prepped/o60674_pocket -o data/clusters/o60674 --n-clusters 10
+dd_afpocket-cluster data/sample/o60674 data/prepped/o60674_pocket -o data/clusters/o60674 --n-clusters 10
 ```
 
 Writes `cluster_00.pdb` (largest cluster) through `cluster_09.pdb`, plus
@@ -210,7 +211,7 @@ which would mean re-running fpocket per frame, far too slow (see
 "Performance"). `--pocket-expand-only` restricts clustering to frames whose
 volume is `>= reference * (1 + --pocket-expand-margin)`, where `reference`
 is that same proxy computed on the pre-MD structure -- a post-hoc selection
-over an already-sampled, otherwise-unbiased ensemble (`dd_af-sample` itself
+over an already-sampled, otherwise-unbiased ensemble (`dd_afpocket-sample` itself
 knows nothing about "expansion"; nothing about how the frames were
 generated changes, only which of them are eligible to become a
 representative structure).
@@ -232,14 +233,14 @@ given a distinct color (translucent cartoon for the whole receptor, opaque
 sticks over the pocket-lining residues, since that's the part that actually
 varies between clusters -- everything else was frozen by `restraints.py`
 during sampling). No structural alignment step is needed first: every
-cluster PDB already shares dd_af's restrained-MD reference frame.  Opening
+cluster PDB already shares dd_afpocket's restrained-MD reference frame.  Opening
 the file needs internet access (3Dmol.js loads from a CDN, same as
 py3Dmol's normal Jupyter usage).
 
-### End-to-end (`dd_af-run`)
+### End-to-end (`dd_afpocket-run`)
 
 ```bash
-dd_af-run O60674 -o data --n-replicas 4 --n-jobs 2 --n-clusters 10
+dd_afpocket-run O60674 -o data --n-replicas 4 --n-jobs 2 --n-clusters 10
 ```
 
 Runs all four stages, writing everything under `data/o60674/`.
@@ -257,7 +258,7 @@ definition and residue frame, so the box is consistent across all of them.
 - **Plain `openmm.app.ForceField`, not `SystemGenerator`.** `dd_docking/
   refine_md.py` and `dd_md/system_build.py` need `SystemGenerator` because
   their systems include a small-molecule ligand (GAFF/SMIRNOFF
-  parameterization). `dd_af`'s systems are apo -- never a ligand -- so a
+  parameterization). `dd_afpocket`'s systems are apo -- never a ligand -- so a
   plain `ForceField(...)` is all that's needed. This also sidesteps a real
   environment issue: constructing a `SystemGenerator` without an explicit
   `small_molecule_forcefield="gaff-*"` eagerly triggers `openff.toolkit`'s
@@ -270,7 +271,7 @@ definition and residue frame, so the box is consistent across all of them.
   (GAFF) code path that never reaches the broken import.
 - **A curated, empirically-verified forcefield/water registry
   (`sample.PROTEIN_FORCEFIELDS`), not "every XML OpenMM ships".** OpenMM
-  bundles far more protein/water/GB parameter files than dd_af exposes; an
+  bundles far more protein/water/GB parameter files than dd_afpocket exposes; an
   untested pairing (e.g. an AMBER-parametrized GB file against CHARMM atom
   types) can fail outright or silently build a mismatched system. Every
   `--protein-forcefield` x `--implicit-solvent` combination and every
@@ -278,12 +279,12 @@ definition and residue frame, so the box is consistent across all of them.
   confirmed (via `ForceField(...).createSystem(...)` / `Modeller.
   addSolvent(...)` + `createSystem(...)`) to build successfully on this
   project's development machine before being added.
-- **Explicit solvent is solvated exactly once per `dd_af-sample`
+- **Explicit solvent is solvated exactly once per `dd_afpocket-sample`
   invocation, shared by every replica.** `Modeller.addSolvent` has no seed
   parameter -- its ion placement is randomized -- so solvating
   independently per replica (safe for the *implicit* system build, which is
   deterministic) would give each replica's DCD a different atom count/
-  ordering than whatever `complex_top.pdb` `dd_af-cluster` ends up loading
+  ordering than whatever `complex_top.pdb` `dd_afpocket-cluster` ends up loading
   every replica's DCD against. `sample.sample_pocket` solvates once,
   writes the periodic structure to `solvated_input.pdb`, and every replica
   loads that file as plain, deterministic input -- structurally identical
@@ -323,7 +324,7 @@ definition and residue frame, so the box is consistent across all of them.
 Implicit-solvent (GBn2) CPU MD is not fast, and force-evaluation cost
 scales with total atom count even though only the pocket neighborhood is
 actually integrated (the restrained region still needs its forces
-computed every step). Measured end-to-end (`dd_af-sample`, 2 replicas via
+computed every step). Measured end-to-end (`dd_afpocket-sample`, 2 replicas via
 `--n-jobs 2`, ~8 CPU threads pinned per replica) on this project's
 development machine (a shared 16-core desktop, not a dedicated compute
 node):
@@ -340,7 +341,7 @@ node):
   not finish within several CPU-minutes per thread when contending with
   other jobs for cores on this shared machine. Budget accordingly (or use
   a GPU) rather than assuming the small-protein numbers above scale
-  linearly with atom count; pocket detection (`dd_af-pocket`, fpocket) is
+  linearly with atom count; pocket detection (`dd_afpocket-pocket`, fpocket) is
   unaffected by protein size in practice -- it completed on JAK2 (87
   candidate pockets, top-ranked druggability 0.829) in a few seconds.
 
@@ -350,7 +351,7 @@ node):
   on GPU than CPU.
 - For large multi-domain targets like full-length JAK2, consider providing
   a smaller construct (e.g. an isolated kinase domain) if your workflow
-  allows it -- `dd_af` doesn't currently offer residue-range slicing, only
+  allows it -- `dd_afpocket` doesn't currently offer residue-range slicing, only
   whole-chain selection via `dd_prep`.
 - Scale `--sample-ns`/`--equil-ps`/`--n-replicas` down for exploratory runs
   and back up once you've confirmed the pipeline behaves as expected on
@@ -364,7 +365,7 @@ node):
 
 ## Limitations
 
-- Being apo, `dd_af` cannot reproduce ligand-induced conformational change
+- Being apo, `dd_afpocket` cannot reproduce ligand-induced conformational change
   (induced fit) -- only the unbound protein's own local flexibility around
   a computationally-detected pocket. Combine with `dd_docking`'s own
   induced-fit refinement (`dd_docking-refine`) downstream if that matters
@@ -372,7 +373,7 @@ node):
 - Pocket detection quality depends entirely on fpocket; a pocket it misses
   or mis-scores cannot be recovered except via `--pocket-residues`'
   manual override.
-- No residue-range slicing: `dd_af` samples whatever chain(s) `dd_prep`
+- No residue-range slicing: `dd_afpocket` samples whatever chain(s) `dd_prep`
   fetched, which for a multi-domain protein may be far larger (and slower)
   than the domain actually relevant to the pocket of interest.
 
@@ -386,6 +387,6 @@ node):
 | `cluster.py` | Pooled-trajectory RMSD clustering, medoid selection, pocket-volume proxy/filtering, representative-structure/report output |
 | `visualize.py` | Standalone py3Dmol HTML overlay of every cluster's representative structure |
 | `pipeline.py` | Per-stage orchestration functions plus `run_end_to_end` |
-| `cli.py` | `dd_af-fetch`/`dd_af-pocket`/`dd_af-sample`/`dd_af-cluster`/`dd_af-run` argparse entry points |
+| `cli.py` | `dd_afpocket-fetch`/`dd_afpocket-pocket`/`dd_afpocket-sample`/`dd_afpocket-cluster`/`dd_afpocket-run` argparse entry points |
 | `progress.py` | Progress-line printing (per-replica, per-pocket, per-cluster, in-run OpenMM step reporter) |
 | `parallel.py` | `ProcessPoolExecutor`-based parallel map, copied from `dd_docking/parallel.py` |

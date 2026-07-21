@@ -232,7 +232,7 @@ def cluster_pocket_trajectory(
     every representative structure comes from a frame where the pocket
     opened up rather than closed down. This is a post-hoc selection over an
     otherwise-unbiased restrained-MD ensemble, not a steering force during
-    sampling itself: `dd_af-sample` doesn't know about "pocket expansion" at
+    sampling itself: `dd_afpocket-sample` doesn't know about "pocket expansion" at
     all, so nothing about how the frames were generated is affected, only
     which of them are eligible to become a representative structure.
 

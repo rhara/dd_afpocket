@@ -1,9 +1,9 @@
 """Command-line entry points:
-  dd_af-fetch    UNIPROT -o out_dir
-  dd_af-pocket   prepped.pdb -o out_dir
-  dd_af-sample   prepped.pdb pocket_dir -o out_dir
-  dd_af-cluster  sample_dir pocket_dir -o out_dir
-  dd_af-run      UNIPROT -o out_dir
+  dd_afpocket-fetch    UNIPROT -o out_dir
+  dd_afpocket-pocket   prepped.pdb -o out_dir
+  dd_afpocket-sample   prepped.pdb pocket_dir -o out_dir
+  dd_afpocket-cluster  sample_dir pocket_dir -o out_dir
+  dd_afpocket-run      UNIPROT -o out_dir
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from .pocket import parse_residue_list
 from .sample import PROTEIN_FORCEFIELDS
 
 # Sampling-length/replica-count/GB-model bundles for `--preset`, selected by
-# `dd_af-sample`/`dd_af-run`. "default" spells out sample_pocket's own
+# `dd_afpocket-sample`/`dd_afpocket-run`. "default" spells out sample_pocket's own
 # defaults so `--preset quick`'s savings are legible by contrast; "quick" is
 # a coarse, CPU-only-friendly setting for when only rough pocket-shape
 # diversity is needed for downstream ensemble docking, not a converged
@@ -101,7 +101,7 @@ def _add_forcefield_args(parser: argparse.ArgumentParser) -> None:
 
 def build_fetch_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="dd_af-fetch",
+        prog="dd_afpocket-fetch",
         description="Fetch an AlphaFold DB model and repair it to MD grade (delegates to dd_prep).",
     )
     parser.add_argument("uniprot", help="UniProt accession, e.g. O60674")
@@ -125,10 +125,10 @@ def main_fetch(argv=None):
 
 def build_pocket_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="dd_af-pocket",
+        prog="dd_afpocket-pocket",
         description="Detect a druggable pocket with fpocket and write pocket_report.json/pocket_box.json.",
     )
-    parser.add_argument("prepped_pdb", help="MD-grade prepped structure (dd_af-fetch or dd_prep-run --repair md output)")
+    parser.add_argument("prepped_pdb", help="MD-grade prepped structure (dd_afpocket-fetch or dd_prep-run --repair md output)")
     parser.add_argument("-o", "--out-dir", required=True, help="Output directory")
     parser.add_argument("--pocket-rank", type=int, default=1, help="1-indexed pocket rank by Druggability Score descending")
     parser.add_argument("--pocket-residues", default=None, metavar="A:42,A:87,...", help="Bypass fpocket's residue detection for the selected pocket with a manual chain:resnum list")
@@ -150,11 +150,11 @@ def main_pocket(argv=None):
 
 def build_sample_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="dd_af-sample",
-        description="Restrained MD sampling of the pocket neighborhood (dd_af-pocket output required).",
+        prog="dd_afpocket-sample",
+        description="Restrained MD sampling of the pocket neighborhood (dd_afpocket-pocket output required).",
     )
-    parser.add_argument("prepped_pdb", help="MD-grade prepped structure (must match the one dd_af-pocket ran on)")
-    parser.add_argument("pocket_dir", help="Directory containing pocket_report.json from dd_af-pocket")
+    parser.add_argument("prepped_pdb", help="MD-grade prepped structure (must match the one dd_afpocket-pocket ran on)")
+    parser.add_argument("pocket_dir", help="Directory containing pocket_report.json from dd_afpocket-pocket")
     parser.add_argument("-o", "--out-dir", required=True, help="Output directory")
     _add_preset_args(parser)
     _add_forcefield_args(parser)
@@ -189,11 +189,11 @@ def main_sample(argv=None):
 
 def build_cluster_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="dd_af-cluster",
+        prog="dd_afpocket-cluster",
         description="Cluster pooled sampling replicas into N representative pocket conformations.",
     )
-    parser.add_argument("sample_dir", help="Directory containing complex_top.pdb/sample_r*.dcd from dd_af-sample")
-    parser.add_argument("pocket_dir", help="Directory containing pocket_report.json from dd_af-pocket")
+    parser.add_argument("sample_dir", help="Directory containing complex_top.pdb/sample_r*.dcd from dd_afpocket-sample")
+    parser.add_argument("pocket_dir", help="Directory containing pocket_report.json from dd_afpocket-pocket")
     parser.add_argument("-o", "--out-dir", required=True, help="Output directory for cluster_NN.pdb / cluster_report.csv")
     parser.add_argument("--n-clusters", type=int, default=10, help="Number of representative structures to produce")
     parser.add_argument("--cluster-atoms", default="ca", choices=["ca", "heavy"], help="Pocket atom selection used for the RMSD distance matrix")
@@ -203,7 +203,7 @@ def build_cluster_parser() -> argparse.ArgumentParser:
         help="Only cluster pooled frames whose pocket_volume_proxy (convex hull over --cluster-atoms) is "
              ">= the pre-MD reference structure's -- i.e. every representative structure comes from a frame "
              "where the pocket opened up, never one where it closed down. A post-hoc selection over the "
-             "sampled ensemble, not a bias applied during dd_af-sample itself.",
+             "sampled ensemble, not a bias applied during dd_afpocket-sample itself.",
     )
     parser.add_argument(
         "--pocket-expand-margin", type=float, default=0.0,
@@ -228,7 +228,7 @@ def main_cluster(argv=None):
     selection = pipeline.load_pocket_selection(args.pocket_dir)
     dcds = sorted(sample_dir.glob("sample_r*.dcd"))
     if not dcds:
-        raise SystemExit(f"dd_af-cluster: no sample_r*.dcd found in {sample_dir}")
+        raise SystemExit(f"dd_afpocket-cluster: no sample_r*.dcd found in {sample_dir}")
 
     rows = pipeline.cluster_pocket(
         sample_dir / "complex_top.pdb", dcds, selection["residues"], args.out_dir,
@@ -244,7 +244,7 @@ def main_cluster(argv=None):
 
 def build_run_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="dd_af-run",
+        prog="dd_afpocket-run",
         description="End-to-end: fetch AFDB model -> detect druggable pocket -> restrained MD sampling -> cluster into N representative structures.",
     )
     parser.add_argument("uniprot", help="UniProt accession, e.g. O60674")

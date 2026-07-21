@@ -8,7 +8,7 @@ Plain `openmm.app.ForceField` is used to build the system rather than
 `openmmforcefields.generators.SystemGenerator` (the pattern
 `dd_docking/refine_md.py` and `dd_md/system_build.py` use): both of those
 projects need `SystemGenerator` because their systems include a small-
-molecule ligand that needs GAFF/SMIRNOFF parameterization. dd_af's systems
+molecule ligand that needs GAFF/SMIRNOFF parameterization. dd_afpocket's systems
 never have a ligand -- these are apo AlphaFold models -- so a plain
 `ForceField(...)` is all that is needed, and it happens to sidestep a real
 environment issue: constructing a `SystemGenerator` without an explicit

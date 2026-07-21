@@ -1,9 +1,9 @@
 """Self-contained (no server) py3Dmol overlay of every cluster's
-representative structure, so the pocket-shape diversity `dd_af-cluster`
+representative structure, so the pocket-shape diversity `dd_afpocket-cluster`
 produces can actually be looked at rather than only read off
 `cluster_report.csv`'s RMSD/volume numbers.
 
-Every cluster PDB already shares dd_af's restrained-MD reference frame
+Every cluster PDB already shares dd_afpocket's restrained-MD reference frame
 (`restraints.py` holds everything outside the pocket neighborhood fixed to
 the pre-MD structure's own coordinates), so no additional structural
 alignment step is needed before overlaying them -- unlike a typical
@@ -79,7 +79,7 @@ def build_cluster_overlay_view(
         # that's the region the overlay exists to compare -- the rest of
         # the receptor is identical (frozen) across clusters by
         # construction. Chain is omitted from the selector (3Dmol.js has no
-        # per-chain "or" grouping in one selection) -- fine for dd_af's
+        # per-chain "or" grouping in one selection) -- fine for dd_afpocket's
         # normal single-chain AFDB inputs; a multi-chain pocket zooms to the
         # union of residue numbers across chains instead of each chain's
         # own residues, a minor imprecision only when resnums also collide
@@ -104,7 +104,7 @@ def write_cluster_overlay_html(
         for i, p in enumerate(cluster_pdbs)
     )
     html = _HTML_TEMPLATE.format(
-        title=f"dd_af cluster overlay ({len(cluster_pdbs)} structure(s))", legend=legend, body=view._make_html(),
+        title=f"dd_afpocket cluster overlay ({len(cluster_pdbs)} structure(s))", legend=legend, body=view._make_html(),
     )
     out_path.write_text(html)
     return out_path

@@ -1,5 +1,5 @@
 [project]
-name = "dd_af"
+name = "dd_afpocket"
 version = "0.1.0"
 description = "Detect a druggable pocket in an AlphaFold DB model, sample its local flexibility with restrained MD, and cluster the trajectory into representative receptor conformations for ensemble docking"
 readme = "README.md"
@@ -11,15 +11,15 @@ dependencies = [
 ]
 
 [project.scripts]
-dd_af-fetch = "dd_af.cli:main_fetch"
-dd_af-pocket = "dd_af.cli:main_pocket"
-dd_af-sample = "dd_af.cli:main_sample"
-dd_af-cluster = "dd_af.cli:main_cluster"
-dd_af-run = "dd_af.cli:main_run"
+dd_afpocket-fetch = "dd_afpocket.cli:main_fetch"
+dd_afpocket-pocket = "dd_afpocket.cli:main_pocket"
+dd_afpocket-sample = "dd_afpocket.cli:main_sample"
+dd_afpocket-cluster = "dd_afpocket.cli:main_cluster"
+dd_afpocket-run = "dd_afpocket.cli:main_run"
 
 [build-system]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["dd_af"]
+packages = ["dd_afpocket"]

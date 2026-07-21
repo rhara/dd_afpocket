@@ -1,6 +1,6 @@
 """End-to-end orchestration of the four stages (fetch -> pocket -> sample ->
 cluster), plus each stage as an independently callable function so the
-`dd_af-fetch`/`dd_af-pocket`/`dd_af-sample`/`dd_af-cluster` console commands
+`dd_afpocket-fetch`/`dd_afpocket-pocket`/`dd_afpocket-sample`/`dd_afpocket-cluster` console commands
 can run any one of them on its own.
 """
 from __future__ import annotations
@@ -20,7 +20,7 @@ def fetch_and_prep(uniprot_id: str, raw_dir: Path, out_dir: Path, *, ph: float =
                    plddt_cutoff: float = 50.0, show_progress: bool = True) -> str:
     """UniProt accession -> AFDB fetch + MD-grade structure repair,
     delegated to `dd_prep.pipeline.fetch_and_prepare_afdb` (see PROMPT for
-    why dd_af depends on dd_prep here rather than reimplementing structure
+    why dd_afpocket depends on dd_prep here rather than reimplementing structure
     repair: AlphaFold models have none of the real-PDB-deposit quirks
     dd_md's self-contained `receptor_prep.py` exists to handle). Returns
     the path to the protonated `<uniprot>_afdb_raw_md.pdb` output.
@@ -119,7 +119,7 @@ def run_end_to_end(
     diagnostics: bool = False, pocket_expand_only: bool = False, pocket_expand_margin: float = 0.0,
     visualize: bool = False, ph: float = 7.0, plddt_cutoff: float = 50.0, show_progress: bool = True,
 ) -> Dict[str, Any]:
-    """`dd_af-run`: fetch -> pocket -> sample -> cluster, end-to-end, under
+    """`dd_afpocket-run`: fetch -> pocket -> sample -> cluster, end-to-end, under
     `<out_dir>/<uniprot_id_lower>/`."""
     out_dir = Path(out_dir) / uniprot_id.lower()
     raw_dir = out_dir / "raw"

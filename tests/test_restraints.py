@@ -1,7 +1,7 @@
 from _helpers import atom_line
 
-from dd_af.pocket import Residue
-from dd_af.restraints import freeze_non_pocket_residues, mobile_residue_indices
+from dd_afpocket.pocket import Residue
+from dd_afpocket.restraints import freeze_non_pocket_residues, mobile_residue_indices
 
 # A tiny synthetic 5-residue chain, spaced 4 A apart along x so distance-
 # based mobile-set membership is easy to reason about. Residue 3 (index 2)

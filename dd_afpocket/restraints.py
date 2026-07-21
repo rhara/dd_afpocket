@@ -4,9 +4,9 @@ samples pocket-local flexibility without paying (or risking numerical
 instability from) whole-protein dynamics.
 
 This is a self-contained generalization of `dd_md/restraints.py`'s
-`freeze_distal_and_gap_residues` (dd_af does not import dd_md): that
+`freeze_distal_and_gap_residues` (dd_afpocket does not import dd_md): that
 function defines "pocket" as "close to the docked ligand", which has no
-analogue here, since dd_af's inputs are ligand-free (apo) AlphaFold models.
+analogue here, since dd_afpocket's inputs are ligand-free (apo) AlphaFold models.
 Instead the pocket is defined by `pocket.py`'s fpocket-detected lining
 residues and cavity centroid. The harmonic-restraint mechanics (a
 `CustomExternalForce` back to each atom's starting position, not
@@ -83,7 +83,7 @@ def freeze_non_pocket_residues(
     atom of every non-mobile protein residue to its starting position.
     Residues in `mobile_residues` (see `mobile_residue_indices`) are left
     completely free, side chain and backbone alike. Solvent/ion residues
-    are never restrained (there normally are none: dd_af samples apo
+    are never restrained (there normally are none: dd_afpocket samples apo
     protein-only systems in implicit solvent). Returns residue counts for
     reporting.
     """

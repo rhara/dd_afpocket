@@ -1,7 +1,7 @@
-"""`--preset` resolution for dd_af-sample/dd_af-run: pure argparse logic, no
+"""`--preset` resolution for dd_afpocket-sample/dd_afpocket-run: pure argparse logic, no
 OpenMM/fpocket dependency, so these run everywhere the rest of the test
 suite does (unlike an actual sampling run)."""
-from dd_af.cli import PRESETS, _resolve_preset_args, build_run_parser, build_sample_parser
+from dd_afpocket.cli import PRESETS, _resolve_preset_args, build_run_parser, build_sample_parser
 
 
 def test_default_preset_matches_sample_pocket_defaults():

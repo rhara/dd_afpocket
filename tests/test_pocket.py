@@ -2,7 +2,7 @@ import shutil
 
 import pytest
 
-from dd_af.pocket import (
+from dd_afpocket.pocket import (
     Residue,
     compute_box,
     format_residue_list,

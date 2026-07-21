@@ -215,7 +215,7 @@ def compute_box(receptor_pdb: Path, residues: Sequence[Residue], padding: float 
     every side -- the same "bounding box of a point cloud plus padding"
     convention as `compute_box` in `dd_docking/pocket.py`, applied to
     pocket-lining-residue atoms instead of ligand atoms (there is no ligand:
-    dd_af's output structures are apo)."""
+    dd_afpocket's output structures are apo)."""
     wanted = {(r.chain, r.resnum) for r in residues}
     xs, ys, zs = [], [], []
     for chain, resnum, coord, element in _parse_atom_lines(Path(receptor_pdb).read_text()):

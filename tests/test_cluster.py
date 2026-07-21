@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from dd_af.cluster import cluster_frames, pick_medoids
+from dd_afpocket.cluster import cluster_frames, pick_medoids
 
 # Two well-separated 2-point "clusters" encoded directly as a distance
 # matrix (frames 0,1 near each other; frames 2,3 near each other; the two
