@@ -239,6 +239,14 @@ dd_afpocket-run O60674 -o data --n-replicas 4 --n-jobs 2 --n-clusters 10
 
 Runs all four stages, writing everything under `data/o60674/`.
 
+### Feeding the ensemble into `dd_docking`
+
+The N representative structures are protein-only (apo) PDBs, directly
+usable as `dd_docking`'s ensemble-member input. Since there is no
+co-crystal ligand to derive a docking box from, use `pocket_box.json`'s
+box (center/size) for every member -- they share the same pocket
+definition and residue frame, so the box is consistent across all of them.
+
 ## Design notes
 
 - **Plain `openmm.app.ForceField`, not `SystemGenerator`.** `SystemGenerator`
