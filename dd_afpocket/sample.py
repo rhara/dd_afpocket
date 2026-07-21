@@ -186,7 +186,7 @@ def _solvate_and_write(
 def _build_system(protein_pdb: Path, *, platform_name: str = "CPU", nonbonded_cutoff_nm: float = 1.5,
                    cpu_threads: int = 0, protein_forcefield: str = "amber14-all", solvent: str = "implicit",
                    implicit_solvent: str = "gbn2", water_model: str = "tip3p"):
-    """Load `protein_pdb` (already protonated -- dd_prep's `*_md.pdb`
+    """Load `protein_pdb` (already protonated -- `prep.py`'s `*_md.pdb`
     output, or, for `solvent="explicit"`, `_solvate_and_write`'s already-
     periodic output) and build an OpenMM system for it. Returns (pdbfile,
     system, platform, platform_name_used, properties).

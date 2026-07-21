@@ -6,7 +6,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 dependencies = [
-    "rdkit", "numpy", "pandas", "dd_prep",
+    "rdkit", "numpy", "pandas", "pdbfixer",
     "openmm", "mdtraj", "matplotlib", "scipy", "scikit-learn", "py3Dmol",
 ]
 

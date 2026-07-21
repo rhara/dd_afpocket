@@ -13,14 +13,17 @@ not tied to any specific target (same philosophy as `dd_prep` / `dd_docking`
 stage of a `dd_prep` (AFDB fetch + MD-grade repair) -> **`dd_afpocket`** (pocket
 detection + local restrained-MD sampling + clustering) -> `dd_docking`
 (ensemble docking against the generated conformations) pipeline. `dd_afpocket`
-imports `dd_prep` directly for the fetch/repair step (AlphaFold models have
+has no inter-repo runtime dependency: `prep.py` carries its own AFDB-only
+fetch + MD-grade repair logic, vendored from `dd_prep` (AlphaFold models have
 none of the real-PDB-deposit quirks `dd_md`'s self-contained receptor prep
-exists to handle, so there was no reason to reimplement it here); it does
-not import `dd_docking`/`dd_md`, only mirrors their docking-box convention
-and harmonic-restraint mechanics respectively (see "Design notes" below).
+exists to handle, so only the narrow AFDB/MD-repair path was needed, not the
+general PDB/hetero-classification/docking-repair machinery `dd_prep` provides
+its other consumers); it does not import `dd_docking`/`dd_md` either, only
+mirrors their docking-box convention and harmonic-restraint mechanics
+respectively (see "Design notes" below).
 
 - **Fetch (`dd_afpocket-fetch`)**: UniProt accession -> AlphaFold DB model ->
-  MD-grade repair, delegating to `dd_prep.pipeline.fetch_and_prepare_afdb`.
+  MD-grade repair, via `prep.py`'s `fetch_and_prepare_afdb`.
 - **Pocket (`dd_afpocket-pocket`)**: runs `fpocket` and selects a pocket by
   Druggability Score rank (default: top-ranked), writing the pocket's
   lining residues/center (`pocket_report.json`) and a docking box derived
@@ -46,17 +49,15 @@ and harmonic-restraint mechanics respectively (see "Design notes" below).
 
 ## Installation
 
-Requires rdkit, numpy, pandas, openmm, mdtraj, matplotlib, scipy,
-scikit-learn, py3Dmol (now declared in `pyproject.toml`'s `dependencies`),
-and the `dd_prep` package (for `dd_afpocket-fetch` -- pdbfixer/openmmforcefields
-come in transitively through it), plus the `fpocket` CLI binary (for
+Requires rdkit, numpy, pandas, pdbfixer, openmm, mdtraj, matplotlib, scipy,
+scikit-learn, py3Dmol (all declared in `pyproject.toml`'s `dependencies` --
+no other `dd_*` package is required), plus the `fpocket` CLI binary (for
 `dd_afpocket-pocket`; not available via pip, conda-forge only). Uses its own
 dedicated conda env `dd_afpocket` (python 3.12), independent of the other
 `dd_*` projects:
 
 ```bash
-mamba create -n dd_afpocket -c conda-forge python=3.12 rdkit numpy pandas openmm mdtraj matplotlib scipy scikit-learn py3dmol pytest fpocket
-/opt/miniforge3/envs/dd_afpocket/bin/pip install --no-deps -e ../dd_prep   # if not already installed
+mamba create -n dd_afpocket -c conda-forge python=3.12 rdkit numpy pandas pdbfixer openmm mdtraj matplotlib scipy scikit-learn py3dmol pytest fpocket
 /opt/miniforge3/envs/dd_afpocket/bin/pip install --no-deps -e .
 ```
 
@@ -73,7 +74,7 @@ dd_afpocket-fetch O60674 -o data/prepped
 
 Downloads the current AlphaFold DB model for human JAK2 (UniProt O60674)
 and MD-grade-repairs it (pLDDT-based terminal trimming, PDBFixer, pH 7.0
-protonation) via `dd_prep`, writing `data/prepped/o60674_md.pdb` (`dd_afpocket-fetch`
+protonation) via `prep.py`, writing `data/prepped/o60674_md.pdb` (`dd_afpocket-fetch`
 does not nest output under a `<uniprot>/` subdirectory -- only `dd_afpocket-run`
 does, for its own multi-stage output layout below).
 
@@ -352,7 +353,7 @@ node):
 - For large multi-domain targets like full-length JAK2, consider providing
   a smaller construct (e.g. an isolated kinase domain) if your workflow
   allows it -- `dd_afpocket` doesn't currently offer residue-range slicing, only
-  whole-chain selection via `dd_prep`.
+  whole-chain selection via `prep.py`.
 - Scale `--sample-ns`/`--equil-ps`/`--n-replicas` down for exploratory runs
   and back up once you've confirmed the pipeline behaves as expected on
   your hardware; there's no dedicated "screen then confirm" gate here (this
@@ -373,7 +374,7 @@ node):
 - Pocket detection quality depends entirely on fpocket; a pocket it misses
   or mis-scores cannot be recovered except via `--pocket-residues`'
   manual override.
-- No residue-range slicing: `dd_afpocket` samples whatever chain(s) `dd_prep`
+- No residue-range slicing: `dd_afpocket` samples whatever chain(s) `prep.py`
   fetched, which for a multi-domain protein may be far larger (and slower)
   than the domain actually relevant to the pocket of interest.
 

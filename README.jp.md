@@ -1,9 +1,9 @@
 # dd_afpocket
 
-静的なAlphaFold DB予測構造を、アンサンブルドッキングに適した少数の受容体コンフォメーションからなるアンサンブルへと変換する: druggableなポケットを検出し、restrained MD（拘束付きMD、ポケット近傍のみが動き、蛋白質の残りは位置拘束される）でそのポケットの局所的な柔軟性をサンプリングし、得られたトラジェクトリを構造的にクラスタリングして少数の代表的なコンフォメーションにまとめる。特定のターゲットに依存しない再利用可能なパッケージとして設計されている（`dd_prep` / `dd_docking` / `dd_overlay` / `dd_viewer` / `dd_confgen` と同じ思想）——概念的には `dd_prep`（AFDB取得＋MDグレードの修復）→ **`dd_afpocket`**（ポケット検出＋局所restrained-MDサンプリング＋クラスタリング）→ `dd_docking`（生成されたコンフォメーション群に対するアンサンブルドッキング）というパイプラインの中間段階にあたる。`dd_afpocket` はfetch/repair段階のために `dd_prep` を直接importする（AlphaFoldモデルには `dd_md` の自己完結的な受容体前処理が対処すべき実PDB由来の癖が一切ないため、ここで再実装する理由はなかった）。`dd_docking`/`dd_md` はimportせず、それぞれのドッキングボックス規約とharmonic-restraint（調和拘束）機構を踏襲するのみである（後述の「設計メモ」参照）。
+静的なAlphaFold DB予測構造を、アンサンブルドッキングに適した少数の受容体コンフォメーションからなるアンサンブルへと変換する: druggableなポケットを検出し、restrained MD（拘束付きMD、ポケット近傍のみが動き、蛋白質の残りは位置拘束される）でそのポケットの局所的な柔軟性をサンプリングし、得られたトラジェクトリを構造的にクラスタリングして少数の代表的なコンフォメーションにまとめる。特定のターゲットに依存しない再利用可能なパッケージとして設計されている（`dd_prep` / `dd_docking` / `dd_overlay` / `dd_viewer` / `dd_confgen` と同じ思想）——概念的には `dd_prep`（AFDB取得＋MDグレードの修復）→ **`dd_afpocket`**（ポケット検出＋局所restrained-MDサンプリング＋クラスタリング）→ `dd_docking`（生成されたコンフォメーション群に対するアンサンブルドッキング）というパイプラインの中間段階にあたる。`dd_afpocket` は他の`dd_*`プロジェクトへの実行時依存を一切持たない: `prep.py` がfetch/repair段階のAFDB専用ロジックを`dd_prep`からvendor（移植）して自己完結している（AlphaFoldモデルには `dd_md` の自己完結的な受容体前処理が対処すべき実PDB由来の癖が一切なく、`dd_prep`が他の消費者向けに提供する汎用的なPDB/ヘテロ原子分類/ドッキング用修復機構は不要なため、AFDB/MD修復のみの狭い経路だけを取り込んだ）。`dd_docking`/`dd_md` もimportせず、それぞれのドッキングボックス規約とharmonic-restraint（調和拘束）機構を踏襲するのみである（後述の「設計メモ」参照）。
 
 - **Fetch (`dd_afpocket-fetch`)**: UniProtアクセッション番号 -> AlphaFold DBモデル ->
-  MDグレードの修復。`dd_prep.pipeline.fetch_and_prepare_afdb` に委譲する。
+  MDグレードの修復。`prep.py` の `fetch_and_prepare_afdb` を使用する。
 - **Pocket (`dd_afpocket-pocket`)**: `fpocket` を実行し、Druggability Scoreの順位で
   ポケットを1つ選択する（デフォルトでは最上位）。選択したポケットの
   裏打ち残基／中心座標を書き出し（`pocket_report.json`）、それらの残基の
@@ -29,16 +29,15 @@
 
 ## インストール
 
-rdkit, numpy, pandas, openmm, mdtraj, matplotlib, scipy, scikit-learn,
-py3Dmol（`pyproject.toml`の`dependencies`に明記済み）、および `dd_prep`
-パッケージ（`dd_afpocket-fetch`用、pdbfixer/openmmforcefieldsはこちら経由で
-入る）、さらに `fpocket` CLIバイナリ（`dd_afpocket-pocket`用、pipでは入らない
-ためconda-forge必須）が必要である。他の`dd_*`プロジェクトとは独立した、
-専用のconda env `dd_afpocket`（python 3.12）を使用する:
+rdkit, numpy, pandas, pdbfixer, openmm, mdtraj, matplotlib, scipy,
+scikit-learn, py3Dmol（すべて`pyproject.toml`の`dependencies`に明記済み——
+他の`dd_*`パッケージへの依存は一切ない）、さらに `fpocket` CLIバイナリ
+（`dd_afpocket-pocket`用、pipでは入らないためconda-forge必須）が必要である。
+他の`dd_*`プロジェクトとは独立した、専用のconda env `dd_afpocket`
+（python 3.12）を使用する:
 
 ```bash
-mamba create -n dd_afpocket -c conda-forge python=3.12 rdkit numpy pandas openmm mdtraj matplotlib scipy scikit-learn py3dmol pytest fpocket
-/opt/miniforge3/envs/dd_afpocket/bin/pip install --no-deps -e ../dd_prep   # 未インストールの場合
+mamba create -n dd_afpocket -c conda-forge python=3.12 rdkit numpy pandas pdbfixer openmm mdtraj matplotlib scipy scikit-learn py3dmol pytest fpocket
 /opt/miniforge3/envs/dd_afpocket/bin/pip install --no-deps -e .
 ```
 
@@ -54,7 +53,7 @@ dd_afpocket-fetch O60674 -o data/prepped
 ```
 
 ヒトJAK2（UniProt O60674）の現行AlphaFold DBモデルをダウンロードし、
-`dd_prep` 経由でMDグレードの修復（pLDDTに基づく末端トリミング、
+`prep.py` 経由でMDグレードの修復（pLDDTに基づく末端トリミング、
 PDBFixer、pH 7.0でのプロトン化）を行い、`data/prepped/o60674_md.pdb` を
 書き出す（`dd_afpocket-fetch` は出力を `<uniprot>/` サブディレクトリの下に
 ネストしない——それを行うのは以下の複数段階の出力レイアウトを持つ
@@ -338,7 +337,7 @@ N個の代表構造は蛋白質のみ（apo）のPDBであり、そのまま `dd
 - 全長JAK2のような大きなマルチドメインターゲットについては、ワークフロー
   上可能であればより小さなコンストラクト（例えば孤立したキナーゼドメイン）
   を提供することを検討すること——`dd_afpocket` は現時点では残基範囲の
-  スライシングを提供しておらず、鎖単位での選択のみを `dd_prep` 経由で
+  スライシングを提供しておらず、鎖単位での選択のみを `prep.py` 経由で
   提供している。
 - 探索的なランでは `--sample-ns`/`--equil-ps`/`--n-replicas` を小さくし、
   自分のハードウェア上でパイプラインが想定通りに動作することを確認して
@@ -361,7 +360,7 @@ N個の代表構造は蛋白質のみ（apo）のPDBであり、そのまま `dd
 - ポケット検出の質は完全にfpocketに依存する。fpocketが見逃したり
   誤ってスコア付けしたりしたポケットは、`--pocket-residues` による
   手動指定を除いて回復できない。
-- 残基範囲のスライシングがない: `dd_afpocket` は `dd_prep` が取得した鎖を
+- 残基範囲のスライシングがない: `dd_afpocket` は `prep.py` が取得した鎖を
   そのままサンプリングする。マルチドメイン蛋白質の場合、これは
   対象のポケットに実際に関係するドメインよりもはるかに大きく
   (そして遅く)なりうる。

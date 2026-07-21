@@ -102,7 +102,7 @@ def _add_forcefield_args(parser: argparse.ArgumentParser) -> None:
 def build_fetch_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="dd_afpocket-fetch",
-        description="Fetch an AlphaFold DB model and repair it to MD grade (delegates to dd_prep).",
+        description="Fetch an AlphaFold DB model and repair it to MD grade (via prep.py).",
     )
     parser.add_argument("uniprot", help="UniProt accession, e.g. O60674")
     parser.add_argument("-o", "--out-dir", required=True, help="Output directory (raw/ and the prepped structure go here)")
@@ -128,7 +128,7 @@ def build_pocket_parser() -> argparse.ArgumentParser:
         prog="dd_afpocket-pocket",
         description="Detect a druggable pocket with fpocket and write pocket_report.json/pocket_box.json.",
     )
-    parser.add_argument("prepped_pdb", help="MD-grade prepped structure (dd_afpocket-fetch or dd_prep-run --repair md output)")
+    parser.add_argument("prepped_pdb", help="MD-grade prepped structure (dd_afpocket-fetch output, or any similarly protonated structure)")
     parser.add_argument("-o", "--out-dir", required=True, help="Output directory")
     parser.add_argument("--pocket-rank", type=int, default=1, help="1-indexed pocket rank by Druggability Score descending")
     parser.add_argument("--pocket-residues", default=None, metavar="A:42,A:87,...", help="Bypass fpocket's residue detection for the selected pocket with a manual chain:resnum list")

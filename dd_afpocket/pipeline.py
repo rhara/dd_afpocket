@@ -18,21 +18,20 @@ from .pocket import PocketSelection, Residue
 
 def fetch_and_prep(uniprot_id: str, raw_dir: Path, out_dir: Path, *, ph: float = 7.0,
                    plddt_cutoff: float = 50.0, show_progress: bool = True) -> str:
-    """UniProt accession -> AFDB fetch + MD-grade structure repair,
-    delegated to `dd_prep.pipeline.fetch_and_prepare_afdb` (see PROMPT for
-    why dd_afpocket depends on dd_prep here rather than reimplementing structure
-    repair: AlphaFold models have none of the real-PDB-deposit quirks
-    dd_md's self-contained `receptor_prep.py` exists to handle). Returns
-    the path to the protonated `<uniprot>_afdb_raw_md.pdb` output.
+    """UniProt accession -> AFDB fetch + MD-grade structure repair, via
+    `prep.py` (vendored from dd_prep, AFDB-only/MD-repair-only path -- see
+    PROMPT for why dd_afpocket carries its own copy instead of importing
+    dd_prep directly). Returns the path to the protonated `<uniprot>_md.pdb`
+    output.
     """
-    from dd_prep.pipeline import fetch_and_prepare_afdb
+    from .prep import fetch_and_prepare_afdb
 
     report = fetch_and_prepare_afdb(
         uniprot_id, Path(raw_dir), Path(out_dir),
-        repair_mode="md", ph=ph, plddt_cutoff=plddt_cutoff, show_progress=show_progress,
+        ph=ph, plddt_cutoff=plddt_cutoff, show_progress=show_progress,
     )
     if not report.md_pdb:
-        raise RuntimeError(f"dd_prep produced no MD-grade output for {uniprot_id}")
+        raise RuntimeError(f"prep produced no MD-grade output for {uniprot_id}")
     return report.md_pdb
 
 
