@@ -1,6 +1,6 @@
 [Japanese version](README.jp.md)
 
-# dd_afpocket — Because a pocket doesn't stay frozen just because AlphaFold does
+# dd_afpocket — Pocket detection meets restrained-MD sampling: one AlphaFold model in, a docking-ready ensemble out
 
 Turns a static AlphaFold DB predicted structure into a small ensemble of
 receptor conformations suitable for ensemble docking: detects a druggable
