@@ -1,0 +1,11 @@
+cluster_id,n_frames,source_replica,source_time_ps,mean_intra_cluster_rmsd_a,pocket_volume_nm3,out_path
+0,1118,3,92.0,0.663,2.604,data/clusters/q8izl9/cluster_00.pdb
+1,161,2,357.0,0.691,2.451,data/clusters/q8izl9/cluster_01.pdb
+2,129,1,142.0,0.635,2.596,data/clusters/q8izl9/cluster_02.pdb
+3,78,2,326.0,0.655,2.498,data/clusters/q8izl9/cluster_03.pdb
+4,52,2,311.0,0.599,2.566,data/clusters/q8izl9/cluster_04.pdb
+5,37,3,386.0,0.684,2.613,data/clusters/q8izl9/cluster_05.pdb
+6,12,4,201.0,0.606,2.546,data/clusters/q8izl9/cluster_06.pdb
+7,8,4,33.0,0.51,2.693,data/clusters/q8izl9/cluster_07.pdb
+8,3,4,30.0,0.427,2.558,data/clusters/q8izl9/cluster_08.pdb
+9,2,2,145.0,0.263,2.649,data/clusters/q8izl9/cluster_09.pdb

@@ -1,0 +1,25 @@
+{
+  "complex_top_pdb": "data/sample/q8izl9/complex_top.pdb",
+  "replica_dcds": [
+    "data/sample/q8izl9/sample_r1.dcd",
+    "data/sample/q8izl9/sample_r2.dcd",
+    "data/sample/q8izl9/sample_r3.dcd",
+    "data/sample/q8izl9/sample_r4.dcd"
+  ],
+  "n_replicas": 4,
+  "n_frames_total": 1600,
+  "residues_frozen": 276,
+  "residues_mobile": 69,
+  "force_constant_kj_per_mol_nm2": 1000.0,
+  "mobile_radius_nm": 1.0,
+  "sample_ns": 2.0,
+  "equil_ps": 20.0,
+  "report_ps": 5.0,
+  "timestep_fs": 4.0,
+  "protein_forcefield": "amber14-all",
+  "solvent": "implicit",
+  "implicit_solvent": "gbn2",
+  "water_model": "tip3p",
+  "platform": "OpenCL",
+  "wall_seconds": 2281.2
+}

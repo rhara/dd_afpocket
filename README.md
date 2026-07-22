@@ -2,6 +2,10 @@
 
 # dd_afpocket — Pocket detection meets restrained-MD sampling: one AlphaFold model in, a docking-ready ensemble out
 
+**Full worked example:** [Example_CDK20.en.md](Example_CDK20.en.md) — every stage of this
+README run end-to-end on a real target (human CDK20, UniProt Q8IZL9), with
+screenshots, interactive HTML views, and raw data.
+
 Turns a static AlphaFold DB predicted structure into a small ensemble of
 receptor conformations suitable for ensemble docking: detects a druggable
 pocket, samples that pocket's local flexibility with restrained MD (only

@@ -3,6 +3,7 @@ __pycache__/
 *.egg-info/
 .venv/
 *.html
+!examples/**/*.html
 .pytest_cache/
 
 # All dd_afpocket-fetch/-pocket/-sample/-cluster/-run outputs (reproducible via
