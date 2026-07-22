@@ -101,7 +101,14 @@ rank 1（druggability 0.646、既知のATP結合キナーゼポケット — Gly
 残基10-18、触媒Lys33、触媒ループAsp127）はrank 2（0.023）よりも約28倍
 druggableで、それ以降は全て0.02以下 — つまり実質的にドラッガブルではない
 浅い表面の窪みである。この差を一目で見えるようにするのが
-`pocket_candidates.html` の狙いである。
+`pocket_candidates.html` の狙いである:
+
+![CDK20モデルで検出された全28候補ポケットのdruggability score](examples/cdk20/images/druggability_scores.png)
+
+![pocket_candidates.html: 上位3候補 — 裏打ち残基のスティック、アルファスフィア空洞ボリューム、残基ラベル](examples/cdk20/images/pocket_candidates.png)
+
+rank 1の残基がUniProt自身のATP結合部位アノテーションとどう一致するかを含む
+詳細な解説: [Example_CDK20.jp.md](Example_CDK20.jp.md)。
 
 ### 3. Restrained-MDサンプリング (`dd_afpocket-sample`)
 
@@ -245,6 +252,19 @@ only: kept X/Y frame(s) ...` を出力する。`--pocket-expand-margin` は
 restrained-MDの基準フレームを共有している。このファイルを開くには
 インターネット接続が必要である（3Dmol.jsはCDNから読み込まれる。py3Dmol
 の通常のJupyter使用時と同様）。
+
+上記のCDK20アンサンブルで実測（4レプリカ×2ns、1600フレームをプール、
+`--n-clusters 10`）: クラスタ0が支配的（1118/1600フレーム、「典型的な」
+ポケット形状）で、ポケット体積プロキシは10個の代表構造にわたって
+2.45〜2.69 nm³の範囲で変動している——ポケット周辺で実際の（控えめだが）
+コンフォメーション多様性が見られる:
+
+![クラスタ人口と代表構造のポケット体積（ヒトCDK20）](examples/cdk20/images/cluster_populations.png)
+
+![cluster_overlay.html: 10個の代表構造すべての重ね合わせ、ポケット裏打ち残基をスティックで、クラスタごとに色分け](examples/cdk20/images/cluster_overlay.png)
+
+詳細な解説（クラスタごとのCSV表とrestrained-MDサンプリング設定を含む）:
+[Example_CDK20.jp.md](Example_CDK20.jp.md)。
 
 ### エンドツーエンド (`dd_afpocket-run`)
 

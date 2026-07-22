@@ -117,7 +117,14 @@ Gly-rich loop residues 10-18, catalytic Lys33, catalytic-loop Asp127) is
 ~28x more druggable than rank 2 (0.023) and every pocket beyond that is
 below ~0.02, i.e. a shallow surface indentation rather than a real
 druggable site -- exactly the kind of gap `pocket_candidates.html` is meant
-to make visible at a glance.
+to make visible at a glance:
+
+![Druggability score across all 28 candidate pockets found on the CDK20 model](examples/cdk20/images/druggability_scores.png)
+
+![pocket_candidates.html: top-3 candidates -- lining-residue sticks, alpha-sphere cavity volume, and residue labels](examples/cdk20/images/pocket_candidates.png)
+
+Full walkthrough, including how rank 1's residues cross-check against
+UniProt's own ATP-binding-site annotation: [Example_CDK20.en.md](Example_CDK20.en.md).
 
 ### 3. Restrained-MD sampling (`dd_afpocket-sample`)
 
@@ -256,6 +263,19 @@ during sampling). No structural alignment step is needed first: every
 cluster PDB already shares dd_afpocket's restrained-MD reference frame.  Opening
 the file needs internet access (3Dmol.js loads from a CDN, same as
 py3Dmol's normal Jupyter usage).
+
+Measured on the CDK20 ensemble above (4 replicas x 2 ns, 1600 pooled
+frames, `--n-clusters 10`): cluster 0 dominates (1118/1600 frames, the
+"typical" pocket shape), with the pocket-volume proxy varying 2.45-2.69 nm³
+across the 10 representatives -- real, if modest, conformational diversity
+around the pocket:
+
+![Cluster population and representative-structure pocket volume, human CDK20](examples/cdk20/images/cluster_populations.png)
+
+![cluster_overlay.html: all 10 representative structures overlaid, pocket-lining residues in sticks, one color per cluster](examples/cdk20/images/cluster_overlay.png)
+
+Full walkthrough (including the per-cluster CSV table and restrained-MD
+sampling settings): [Example_CDK20.en.md](Example_CDK20.en.md).
 
 ### End-to-end (`dd_afpocket-run`)
 
