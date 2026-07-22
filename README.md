@@ -93,6 +93,28 @@ the full multi-domain structure; abbreviated here):
 allosteric site); `--pocket-residues A:42,A:87,...` bypasses fpocket's
 residue detection entirely for a manually-specified site.
 
+`--visualize` additionally writes `pocket_candidates.html`, a standalone
+(no server) py3Dmol view comparing the top `--visualize-top-n` candidate
+pockets (default 3) on the receptor structure: translucent cartoon, opaque
+sticks over each pocket's lining residues, that pocket's fpocket
+alpha-sphere cloud rendered as a solid-colored sphere cluster (the cavity's
+actual empty-space volume, not just the residues around it), and one label
+per lining residue -- one color per rank, so the (often large) gap between
+rank 1 and the rest reads visually instead of only off the printed
+druggability scores:
+
+```bash
+dd_afpocket-pocket data/prepped/q8izl9_md.pdb -o data/prepped/q8izl9_pocket --visualize
+```
+
+Measured on the human CDK20 model (UniProt Q8IZL9): 28 candidate pockets
+found, rank 1 (druggability 0.646, the known ATP-binding kinase pocket --
+Gly-rich loop residues 10-18, catalytic Lys33, catalytic-loop Asp127) is
+~28x more druggable than rank 2 (0.023) and every pocket beyond that is
+below ~0.02, i.e. a shallow surface indentation rather than a real
+druggable site -- exactly the kind of gap `pocket_candidates.html` is meant
+to make visible at a glance.
+
 ### 3. Restrained-MD sampling (`dd_afpocket-sample`)
 
 ```bash
@@ -372,7 +394,7 @@ node):
 | `restraints.py` | Pocket-center-based harmonic position restraints (mobile-residue-set computation + `CustomExternalForce`) |
 | `sample.py` | Forcefield/water-model registry, implicit- and explicit-solvent system building, multi-replica restrained-MD sampling |
 | `cluster.py` | Pooled-trajectory RMSD clustering, medoid selection, pocket-volume proxy/filtering, representative-structure/report output |
-| `visualize.py` | Standalone py3Dmol HTML overlay of every cluster's representative structure |
+| `visualize.py` | Standalone py3Dmol HTML: cluster-representative-structure overlay, and top-candidate-pocket comparison (lining residues, alpha-sphere cavity volume, residue labels) |
 | `pipeline.py` | Per-stage orchestration functions plus `run_end_to_end` |
 | `cli.py` | `dd_afpocket-fetch`/`dd_afpocket-pocket`/`dd_afpocket-sample`/`dd_afpocket-cluster`/`dd_afpocket-run` argparse entry points |
 | `progress.py` | Progress-line printing (per-replica, per-pocket, per-cluster, in-run OpenMM step reporter) |

@@ -54,6 +54,24 @@ def detect_pocket(
     return selection
 
 
+def visualize_pocket_candidates(
+    prepped_pdb: Path, work_dir: Path, *, top_n: int = 3, box_padding: float = 5.0, show_progress: bool = True,
+) -> str:
+    """Render the top `top_n` candidate pockets (by Druggability Score) into
+    a standalone `pocket_candidates.html` under `work_dir` -- lining-residue
+    sticks, alpha-sphere cavity volume, and residue labels, one color per
+    rank (see `visualize.write_pocket_candidates_html`). Reuses `work_dir`'s
+    cached fpocket output if `detect_pocket` already ran there (same
+    `run_fpocket` caching `pocket.top_pocket_candidates` relies on), so
+    calling this right after `detect_pocket` costs no extra fpocket run."""
+    work_dir = Path(work_dir)
+    selections = pocket_mod.top_pocket_candidates(
+        prepped_pdb, work_dir, top_n=top_n, box_padding=box_padding, show_progress=show_progress,
+    )
+    html_path = visualize_mod.write_pocket_candidates_html(prepped_pdb, selections, work_dir / "pocket_candidates.html")
+    return str(html_path)
+
+
 def load_pocket_selection(work_dir: Path) -> Dict[str, Any]:
     """Read back `pocket_report.json`/`pocket_box.json` written by
     `detect_pocket`, returning `{"residues": [Residue, ...], "center":

@@ -1,6 +1,6 @@
 [project]
 name = "dd_afpocket"
-version = "0.1.0"
+version = "0.2.0"
 description = "Detect a druggable pocket in an AlphaFold DB model, sample its local flexibility with restrained MD, and cluster the trajectory into representative receptor conformations for ensemble docking"
 readme = "README.md"
 license = "MIT"

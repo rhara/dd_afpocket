@@ -133,6 +133,18 @@ def build_pocket_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pocket-rank", type=int, default=1, help="1-indexed pocket rank by Druggability Score descending")
     parser.add_argument("--pocket-residues", default=None, metavar="A:42,A:87,...", help="Bypass fpocket's residue detection for the selected pocket with a manual chain:resnum list")
     parser.add_argument("--box-padding", type=float, default=5.0, help="Docking box padding around the pocket-lining residues, in Angstrom")
+    parser.add_argument(
+        "--visualize", action="store_true",
+        help="Also write pocket_candidates.html: a standalone (no server) py3Dmol view of the top "
+             "--visualize-top-n candidate pockets -- lining-residue sticks, fpocket alpha-sphere cavity "
+             "volume, and residue labels, one color per rank -- for visually comparing the strongest "
+             "candidates rather than only reading druggability scores off the printed pocket list",
+    )
+    parser.add_argument(
+        "--visualize-top-n", type=int, default=3,
+        help="Number of top-druggability candidate pockets to include in pocket_candidates.html "
+             "(default: 3; ignored without --visualize)",
+    )
     parser.add_argument("--no-progress", action="store_true")
     return parser
 
@@ -146,6 +158,12 @@ def main_pocket(argv=None):
     )
     print(f"\n[done] pocket rank {selection.rank} (druggability={selection.druggability_score:.3f}, "
           f"{len(selection.residues)} residue(s)) -> {args.out_dir}/pocket_report.json")
+    if args.visualize:
+        html_path = pipeline.visualize_pocket_candidates(
+            args.prepped_pdb, args.out_dir, top_n=args.visualize_top_n, box_padding=args.box_padding,
+            show_progress=False,  # detect_pocket above already printed the ranked pocket list
+        )
+        print(f"[done] pocket candidates view -> {html_path}")
 
 
 def build_sample_parser() -> argparse.ArgumentParser:

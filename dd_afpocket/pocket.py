@@ -160,7 +160,8 @@ def rank_pockets(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _parse_atom_lines(pdb_text: str):
-    """Yield (chain, resnum, coord, element) for every ATOM/HETATM line."""
+    """Yield (chain, resnum, resname, atom_name, coord, element) for every
+    ATOM/HETATM line."""
     for ln in pdb_text.splitlines():
         if ln[:6] not in ("ATOM  ", "HETATM"):
             continue
@@ -170,8 +171,10 @@ def _parse_atom_lines(pdb_text: str):
             coord = (float(ln[30:38]), float(ln[38:46]), float(ln[46:54]))
         except ValueError:
             continue
+        resname = ln[17:20].strip()
+        atom_name = ln[12:16].strip()
         element = ln[76:78].strip() if len(ln) >= 78 else ""
-        yield chain, resnum, coord, element
+        yield chain, resnum, resname, atom_name, coord, element
 
 
 def lining_residues(out_dir: Path, fpocket_id: int) -> List[Residue]:
@@ -183,7 +186,7 @@ def lining_residues(out_dir: Path, fpocket_id: int) -> List[Residue]:
     text = atm_pdb.read_text()
     seen = set()
     residues = []
-    for chain, resnum, _coord, _element in _parse_atom_lines(text):
+    for chain, resnum, _resname, _atom_name, _coord, _element in _parse_atom_lines(text):
         key = (chain, resnum)
         if key not in seen:
             seen.add(key)
@@ -191,11 +194,18 @@ def lining_residues(out_dir: Path, fpocket_id: int) -> List[Residue]:
     return sorted(residues, key=lambda r: (r.chain, r.resnum))
 
 
+def vert_pqr_path(out_dir: Path, fpocket_id: int) -> Path:
+    """Path to `pocketN_vert.pqr` -- the alpha-sphere centers (Voronoi
+    vertices) defining pocket `fpocket_id`'s cavity volume, as written by
+    fpocket next to `pocketN_atm.pdb`."""
+    return Path(out_dir) / "pockets" / f"pocket{fpocket_id}_vert.pqr"
+
+
 def pocket_center(out_dir: Path, fpocket_id: int) -> Coord:
     """Centroid (Angstrom, receptor coordinate frame) of the alpha-sphere
     centers defining pocket `fpocket_id`'s cavity, from `pocketN_vert.pqr`
     (free-format PQR text: `ATOM serial name resName resSeq x y z q r`)."""
-    vert_pqr = Path(out_dir) / "pockets" / f"pocket{fpocket_id}_vert.pqr"
+    vert_pqr = vert_pqr_path(out_dir, fpocket_id)
     xs, ys, zs = [], [], []
     for ln in vert_pqr.read_text().splitlines():
         if not ln.startswith("ATOM"):
@@ -209,6 +219,61 @@ def pocket_center(out_dir: Path, fpocket_id: int) -> Coord:
     return (sum(xs) / len(xs), sum(ys) / len(ys), sum(zs) / len(zs))
 
 
+# Standard three-letter -> one-letter amino-acid codes, for compact residue
+# labels (e.g. "K33") in build_pocket_candidates_view; a residue whose
+# resname isn't in this table (a non-standard/modified residue) falls back
+# to its raw three-letter code instead (see residue_labels).
+_AA3TO1 = {
+    "ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D", "CYS": "C", "GLN": "Q", "GLU": "E", "GLY": "G",
+    "HIS": "H", "ILE": "I", "LEU": "L", "LYS": "K", "MET": "M", "PHE": "F", "PRO": "P", "SER": "S",
+    "THR": "T", "TRP": "W", "TYR": "Y", "VAL": "V",
+}
+
+
+def residue_labels(receptor_pdb: Path, residues: Sequence[Residue]) -> Dict[Residue, Tuple[str, Coord]]:
+    """For each of `residues`, read `receptor_pdb`'s own ATOM records once
+    and return `{residue: (label, anchor_coord)}` -- `label` is the
+    residue's one-letter amino-acid code plus its number (e.g. "K33"),
+    falling back to the raw three-letter PDB resname for anything outside
+    `_AA3TO1`; `anchor_coord` is that residue's CA atom position, or (for a
+    residue with no CA, e.g. a HETATM ligand fragment) the centroid of every
+    atom belonging to it. Used to place one 3D label marker per lining
+    residue in `visualize.build_pocket_candidates_view`."""
+    wanted = {(r.chain, r.resnum) for r in residues}
+    resnames: Dict[Tuple[str, int], str] = {}
+    ca_coord: Dict[Tuple[str, int], Coord] = {}
+    sums: Dict[Tuple[str, int], List[float]] = {}
+    counts: Dict[Tuple[str, int], int] = {}
+
+    for chain, resnum, resname, atom_name, coord, _element in _parse_atom_lines(Path(receptor_pdb).read_text()):
+        key = (chain, resnum)
+        if key not in wanted:
+            continue
+        resnames.setdefault(key, resname)
+        if atom_name == "CA" and key not in ca_coord:
+            ca_coord[key] = coord
+        s = sums.setdefault(key, [0.0, 0.0, 0.0])
+        s[0] += coord[0]
+        s[1] += coord[1]
+        s[2] += coord[2]
+        counts[key] = counts.get(key, 0) + 1
+
+    out: Dict[Residue, Tuple[str, Coord]] = {}
+    for r in residues:
+        key = (r.chain, r.resnum)
+        if key not in resnames:
+            continue
+        label = f"{_AA3TO1.get(resnames[key], resnames[key])}{r.resnum}"
+        if key in ca_coord:
+            coord = ca_coord[key]
+        else:
+            n = counts[key]
+            s = sums[key]
+            coord = (s[0] / n, s[1] / n, s[2] / n)
+        out[r] = (label, coord)
+    return out
+
+
 def compute_box(receptor_pdb: Path, residues: Sequence[Residue], padding: float = 5.0):
     """Docking box center/size (each axis) spanning the heavy-atom
     coordinates of `residues` in `receptor_pdb`, plus `padding` Angstrom on
@@ -218,7 +283,7 @@ def compute_box(receptor_pdb: Path, residues: Sequence[Residue], padding: float 
     dd_afpocket's output structures are apo)."""
     wanted = {(r.chain, r.resnum) for r in residues}
     xs, ys, zs = [], [], []
-    for chain, resnum, coord, element in _parse_atom_lines(Path(receptor_pdb).read_text()):
+    for chain, resnum, _resname, _atom_name, coord, element in _parse_atom_lines(Path(receptor_pdb).read_text()):
         if (chain, resnum) in wanted and element != "H":
             xs.append(coord[0])
             ys.append(coord[1])
@@ -243,6 +308,12 @@ class PocketSelection:
     center: Coord
     box_center: List[float]
     box_size: List[float]
+    # Not part of to_report_dict()'s on-disk JSON schema -- an internal
+    # handle back to fpocket's own <stem>_out/ directory (where
+    # vert_pqr_path/lining_residues/pocket_center already read from) so
+    # visualize.build_pocket_candidates_view can find this pocket's
+    # pocketN_vert.pqr without the caller having to re-derive the path.
+    fpocket_out_dir: str = ""
 
     def to_report_dict(self) -> Dict:
         return {
@@ -259,6 +330,28 @@ class PocketSelection:
 
     def to_box_dict(self) -> Dict:
         return {"center": self.box_center, "size": self.box_size}
+
+
+def _selection_from_row(
+    receptor_pdb: Path, out_dir: Path, row, *,
+    pocket_residues: Optional[Sequence[Residue]] = None, box_padding: float = 5.0,
+) -> PocketSelection:
+    """Build a `PocketSelection` for one already-ranked fpocket row (a
+    `rank_pockets` DataFrame row). Shared by `find_druggable_pocket` (a
+    single selected pocket) and `top_pocket_candidates` (the top N) so both
+    apply the same residues/center/box-derivation logic."""
+    fpocket_id = int(row["fpocket_id"])
+    residues = list(pocket_residues) if pocket_residues else lining_residues(out_dir, fpocket_id)
+    center = pocket_center(out_dir, fpocket_id)
+    box_center, box_size = compute_box(receptor_pdb, residues, padding=box_padding)
+
+    return PocketSelection(
+        receptor_pdb=str(receptor_pdb), fpocket_id=fpocket_id, rank=int(row["rank"]),
+        score=float(row["score"]), druggability_score=float(row["druggability_score"]),
+        n_alpha_spheres=int(row["n_alpha_spheres"]), volume=float(row["volume"]),
+        residues=residues, center=center, box_center=box_center, box_size=box_size,
+        fpocket_out_dir=str(out_dir),
+    )
 
 
 def find_druggable_pocket(
@@ -288,15 +381,25 @@ def find_druggable_pocket(
     if pocket_rank < 1 or pocket_rank > len(ranked):
         raise ValueError(f"--pocket-rank {pocket_rank} out of range (1..{len(ranked)} pockets found)")
     chosen = ranked.iloc[pocket_rank - 1]
-    fpocket_id = int(chosen["fpocket_id"])
+    return _selection_from_row(receptor_pdb, out_dir, chosen, pocket_residues=pocket_residues, box_padding=box_padding)
 
-    residues = list(pocket_residues) if pocket_residues else lining_residues(out_dir, fpocket_id)
-    center = pocket_center(out_dir, fpocket_id)
-    box_center, box_size = compute_box(receptor_pdb, residues, padding=box_padding)
 
-    return PocketSelection(
-        receptor_pdb=str(receptor_pdb), fpocket_id=fpocket_id, rank=int(chosen["rank"]),
-        score=float(chosen["score"]), druggability_score=float(chosen["druggability_score"]),
-        n_alpha_spheres=int(chosen["n_alpha_spheres"]), volume=float(chosen["volume"]),
-        residues=residues, center=center, box_center=box_center, box_size=box_size,
-    )
+def top_pocket_candidates(
+    receptor_pdb: Path, work_dir: Path, *, top_n: int = 3, box_padding: float = 5.0, show_progress: bool = True,
+) -> List[PocketSelection]:
+    """Run fpocket (reusing `work_dir`'s cached output if `find_druggable_pocket`
+    already ran there) and return a `PocketSelection` for each of the top
+    `top_n` pockets by Druggability Score -- for side-by-side comparison of
+    the strongest candidates (see `visualize.build_pocket_candidates_view`),
+    distinct from `find_druggable_pocket`'s single-pocket selection. Returns
+    fewer than `top_n` entries if fpocket found fewer pockets overall."""
+    receptor_pdb = Path(receptor_pdb)
+    out_dir = run_fpocket(receptor_pdb, work_dir)
+    ranked = rank_pockets(parse_info_txt(out_dir))
+
+    progress = PocketProgress(enabled=show_progress)
+    for _, row in ranked.iterrows():
+        progress.update(int(row["rank"]), row["score"], row["druggability_score"], int(row["n_alpha_spheres"]))
+
+    n = min(top_n, len(ranked))
+    return [_selection_from_row(receptor_pdb, out_dir, ranked.iloc[i], box_padding=box_padding) for i in range(n)]

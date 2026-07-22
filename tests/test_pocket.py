@@ -5,13 +5,17 @@ import pytest
 from dd_afpocket.pocket import (
     Residue,
     compute_box,
+    find_druggable_pocket,
     format_residue_list,
     lining_residues,
     parse_info_txt,
     parse_residue_list,
     pocket_center,
     rank_pockets,
+    residue_labels,
     run_fpocket,
+    top_pocket_candidates,
+    vert_pqr_path,
 )
 from _helpers import atom_line
 
@@ -112,6 +116,126 @@ def test_residue_list_roundtrip():
     text = format_residue_list(residues)
     assert text == "A:10,A:20,B:5"
     assert parse_residue_list(text) == residues
+
+
+def test_vert_pqr_path_points_at_pockets_subdir(tmp_path):
+    out_dir = tmp_path / "x_out"
+    assert vert_pqr_path(out_dir, 7) == out_dir / "pockets" / "pocket7_vert.pqr"
+
+
+def test_residue_labels_uses_ca_position_and_one_letter_code(tmp_path):
+    pdb_path = tmp_path / "receptor.pdb"
+    pdb_path.write_text("\n".join([
+        atom_line(1, "N", "LYS", "A", 33, 0.0, 0.0, 0.0),
+        atom_line(2, "CA", "LYS", "A", 33, 1.0, 2.0, 3.0),
+        atom_line(3, "C", "LYS", "A", 33, 2.0, 0.0, 0.0),
+    ]) + "\n")
+
+    labels = residue_labels(pdb_path, [Residue("A", 33)])
+    label, coord = labels[Residue("A", 33)]
+    assert label == "K33"
+    assert coord == pytest.approx((1.0, 2.0, 3.0))
+
+
+def test_residue_labels_falls_back_to_atom_centroid_without_ca(tmp_path):
+    pdb_path = tmp_path / "receptor.pdb"
+    pdb_path.write_text("\n".join([
+        atom_line(1, "O1", "HOH", "A", 500, 0.0, 0.0, 0.0, element="O"),
+        atom_line(2, "O2", "HOH", "A", 500, 2.0, 0.0, 0.0, element="O"),
+    ]) + "\n")
+
+    labels = residue_labels(pdb_path, [Residue("A", 500)])
+    label, coord = labels[Residue("A", 500)]
+    assert label == "HOH500"  # not a standard amino acid -- raw resname kept
+    assert coord == pytest.approx((1.0, 0.0, 0.0))
+
+
+def test_residue_labels_omits_residues_absent_from_receptor(tmp_path):
+    pdb_path = tmp_path / "receptor.pdb"
+    pdb_path.write_text(atom_line(1, "CA", "GLY", "A", 1, 0.0, 0.0, 0.0) + "\n")
+
+    labels = residue_labels(pdb_path, [Residue("A", 999)])
+    assert labels == {}
+
+
+def _pocket_info_block(fpocket_id, druggability, n_alpha_spheres=10, volume=100.0, score=0.0):
+    return (
+        f"Pocket {fpocket_id} :\n"
+        f"\tScore : \t{score}\n"
+        f"\tDruggability Score : \t{druggability}\n"
+        f"\tNumber of Alpha Spheres : \t{n_alpha_spheres}\n"
+        f"\tVolume : \t{volume}\n"
+    )
+
+
+def _write_cached_fpocket_output(work_dir, receptor_stem, pockets):
+    """Pre-populate `work_dir/<receptor_stem>_out/` the way a real
+    `run_fpocket` call would, so `run_fpocket`'s own caching (`if not
+    out_dir.exists(): ...`) skips invoking the real fpocket binary --
+    `pockets` is `{fpocket_id: (druggability, residues, [alpha_sphere_xyz, ...])}`."""
+    out_dir = work_dir / f"{receptor_stem}_out"
+    (out_dir / "pockets").mkdir(parents=True)
+    info_text = "\n".join(_pocket_info_block(fid, drug) for fid, (drug, _residues, _spheres) in pockets.items())
+    (out_dir / f"{receptor_stem}_info.txt").write_text(info_text)
+
+    for fid, (_drug, residues, spheres) in pockets.items():
+        atm_lines = [atom_line(i + 1, "CA", "ALA", r.chain, r.resnum, 0.0, 0.0, 0.0) for i, r in enumerate(residues)]
+        (out_dir / "pockets" / f"pocket{fid}_atm.pdb").write_text("\n".join(atm_lines) + "\n")
+        vert_lines = [
+            f"ATOM  {i + 1:>5}    C STP{fid:>6}    {x:8.3f}{y:8.3f}{z:8.3f}    0.00     3.50"
+            for i, (x, y, z) in enumerate(spheres)
+        ]
+        (out_dir / "pockets" / f"pocket{fid}_vert.pqr").write_text("\n".join(vert_lines) + "\n")
+    return out_dir
+
+
+def test_top_pocket_candidates_ranks_by_druggability_and_caps_at_top_n(tmp_path):
+    pdb_path = tmp_path / "receptor.pdb"
+    pdb_path.write_text("\n".join([
+        atom_line(1, "CA", "GLU", "A", 10, 0.0, 0.0, 0.0),
+        atom_line(2, "CA", "LYS", "A", 20, 5.0, 0.0, 0.0),
+        atom_line(3, "CA", "ASP", "A", 30, 0.0, 5.0, 0.0),
+    ]) + "\n")
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+
+    pockets = {
+        1: (0.500, [Residue("A", 10)], [(1.0, 1.0, 1.0)]),
+        2: (0.900, [Residue("A", 20)], [(2.0, 2.0, 2.0)]),  # most druggable -> rank 1
+        3: (0.100, [Residue("A", 30)], [(3.0, 3.0, 3.0)]),
+    }
+    out_dir = _write_cached_fpocket_output(work_dir, "receptor", pockets)
+
+    top2 = top_pocket_candidates(pdb_path, work_dir, top_n=2, show_progress=False)
+    assert [sel.rank for sel in top2] == [1, 2]
+    assert [sel.fpocket_id for sel in top2] == [2, 1]
+    assert [sel.druggability_score for sel in top2] == pytest.approx([0.900, 0.500])
+    assert all(sel.fpocket_out_dir == str(out_dir) for sel in top2)
+
+    # top_n larger than the number of pockets found -> capped, not padded/errored
+    all3 = top_pocket_candidates(pdb_path, work_dir, top_n=10, show_progress=False)
+    assert len(all3) == 3
+
+
+def test_find_druggable_pocket_selects_pocket_rank_by_druggability(tmp_path):
+    pdb_path = tmp_path / "receptor.pdb"
+    pdb_path.write_text("\n".join([
+        atom_line(1, "CA", "GLU", "A", 10, 0.0, 0.0, 0.0),
+        atom_line(2, "CA", "LYS", "A", 20, 5.0, 0.0, 0.0),
+    ]) + "\n")
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+
+    pockets = {
+        1: (0.200, [Residue("A", 10)], [(1.0, 1.0, 1.0)]),
+        2: (0.800, [Residue("A", 20)], [(2.0, 2.0, 2.0)]),
+    }
+    _write_cached_fpocket_output(work_dir, "receptor", pockets)
+
+    selection = find_druggable_pocket(pdb_path, work_dir, pocket_rank=1, show_progress=False)
+    assert selection.fpocket_id == 2
+    assert selection.residues == [Residue("A", 20)]
+    assert selection.druggability_score == pytest.approx(0.800)
 
 
 def _synthetic_helix_pdb() -> str:
