@@ -1,6 +1,6 @@
 """Progress reporting: one concise line per completed item (mirrors
 `dd_docking/progress.py`'s convention), plus a periodic in-loop reporter for
-the sampling MD itself (`StepProgress`, mirroring `dd_md/progress.py` --
+the sampling MD itself (`StepProgress`, mirroring `dd_mdstability/progress.py` --
 even a CPU-friendly implicit-solvent run is a slow loop that should never go
 silent between start and finish).
 """

@@ -3,15 +3,15 @@ detected druggable pocket to their starting coordinates, so a short MD run
 samples pocket-local flexibility without paying (or risking numerical
 instability from) whole-protein dynamics.
 
-This is a self-contained generalization of `dd_md/restraints.py`'s
-`freeze_distal_and_gap_residues` (dd_afpocket does not import dd_md): that
+This is a self-contained generalization of `dd_mdstability/restraints.py`'s
+`freeze_distal_and_gap_residues` (dd_afpocket does not import dd_mdstability): that
 function defines "pocket" as "close to the docked ligand", which has no
 analogue here, since dd_afpocket's inputs are ligand-free (apo) AlphaFold models.
 Instead the pocket is defined by `pocket.py`'s fpocket-detected lining
 residues and cavity centroid. The harmonic-restraint mechanics (a
 `CustomExternalForce` back to each atom's starting position, not
 `system.setParticleMass(index, 0)`) and default force constant
-(1000 kJ/mol/nm^2) are reused as-is from dd_md, which verified empirically
+(1000 kJ/mol/nm^2) are reused as-is from dd_mdstability, which verified empirically
 that this value runs stably combined with a 4 fs HMR timestep (a stiffer
 spring, 1e5, produced `Particle coordinate is NaN` within a few ps) and
 gives an RMS thermal fluctuation of ~0.86 A at 300 K -- small next to the
@@ -39,7 +39,7 @@ def mobile_residue_indices(
     `mobile_margin_residues` sequence neighbors on each side of every
     mobile residue (so a lone mobile residue is never sandwiched directly
     between frozen neighbors, which would strain the backbone at that
-    junction -- the same idea as dd_md's gap-margin residues, applied to a
+    junction -- the same idea as dd_mdstability's gap-margin residues, applied to a
     different target).
     """
     import numpy as np

@@ -6,7 +6,7 @@ independent replicas whose pooled frames feed `cluster.py`.
 
 Plain `openmm.app.ForceField` is used to build the system rather than
 `openmmforcefields.generators.SystemGenerator` (the pattern
-`dd_docking/refine_md.py` and `dd_md/system_build.py` use): both of those
+`dd_docking/refine_md.py` and `dd_mdstability/system_build.py` use): both of those
 projects need `SystemGenerator` because their systems include a small-
 molecule ligand that needs GAFF/SMIRNOFF parameterization. dd_afpocket's systems
 never have a ligand -- these are apo AlphaFold models -- so a plain
@@ -17,7 +17,7 @@ SMIRNOFF force-field discovery, which in the current `mpro` env fails with
 `ModuleNotFoundError: No module named 'pkg_resources'` (an
 `openff-amber-ff-ports` dependency on the `pkg_resources` API that
 setuptools >= 81 no longer ships). Confirmed this does not affect
-dd_docking/dd_md, since both always pass `small_molecule_forcefield=
+dd_docking/dd_mdstability, since both always pass `small_molecule_forcefield=
 "gaff-2.11"` explicitly, which takes a different (GAFF) template-generator
 code path that never reaches the broken import.
 """
